@@ -22,30 +22,54 @@ export default function FaceRecognizer() {
   // Use labels directly from MongoDB with full image URL
   const labels = fetchedLabels;
 
-  // Retry function
-  const handleRetry = () => {
-    setFinished(false);
-    setMessage("Retrying detection...");
-    setDetectedPerson(null);
-    setConfidence(0);
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  const handleRetry = async () => {
+    try {
+      // Try accessing the camera
+      const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setIsLoading(false);
+          runDetection();
+        };
+      }
+      setMessage("Camera access granted ✅");
+      setFinished(false);
+    } catch (err) {
+      // Handle permanent denial gracefully
+      if (err.name === "NotAllowedError") {
+        setMessage(
+          "Camera access is blocked! To enable it:\n1. Open your browser settings.\n2. Go to 'Site Settings'.\n3. Find 'Camera' permissions.\n4. Allow access for this site."
+        );
+        setFinished(true);
+      } else {
+        setMessage("Cannot access camera ❌");
+        setFinished(true);
+      }
     }
-    runDetection();
   };
+
 
   useEffect(() => {
     let stream;
+    let detectionInterval;
 
     const loadModels = async () => {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      ]);
-      setMessage("Models loaded ✅ Starting webcam...");
-      startVideo();
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        setMessage("Models loaded ✅ Starting webcam...");
+        startVideo();
+      } catch (err) {
+        console.error("Model load error:", err);
+        setMessage("Failed to load models. Please check your network connection.");
+        setIsLoading(false);
+        setFinished(true);
+      }
     };
 
     const startVideo = async () => {
@@ -56,12 +80,19 @@ export default function FaceRecognizer() {
           videoRef.current.onloadedmetadata = () => {
             videoRef.current.play();
             setIsLoading(false);
-            runDetection();
+            setMessage("Camera active. Looking for faces...");
+            runDetection(); // Start recognition loop
           };
         }
       } catch (err) {
         console.error("Webcam error:", err);
-        setMessage("Cannot access webcam ❌");
+        if (err.name === "NotAllowedError") {
+          setMessage(
+            `Camera access is blocked! To enable it: \n 1. Open your browser settings.\n2. Go to 'Site Settings'.\n3. Find 'Camera' permissions.\n4. Allow access for this site.`
+          );
+        } else {
+          setMessage("Cannot access webcam ❌. Please try again.");
+        }
         setFinished(true);
         setIsLoading(false);
       }
@@ -177,85 +208,143 @@ export default function FaceRecognizer() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 flex flex-col items-center justify-start py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex flex-col items-center justify-start py-12 px-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-slate-900/40 to-slate-900"></div>
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+
       {/* Header & Register Button */}
-      <div className="text-center mb-12 space-y-4">
-        <h1 className="text-5xl md:text-7xl font-extrabold text-indigo-700 dark:text-indigo-300">
-          Face Recognition
-        </h1>
-        <p className="text-lg text-gray-600 dark:text-gray-400">
+      <div className="text-center mb-12 space-y-6 relative z-10">
+        <div className="space-y-4">
+          <h1 className="text-6xl md:text-8xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent drop-shadow-2xl">
+            Face Recognition
+          </h1>
+          <div className="h-1 w-32 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto rounded-full shadow-lg shadow-purple-500/50"></div>
+        </div>
+        <p className="text-xl text-gray-300 font-light tracking-wide">
           Smart Attendance System
         </p>
+
         <Link href="/register">
-          <Button className="bg-white/80 dark:bg-slate-700/80 backdrop-blur-sm border border-indigo-200 dark:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-200 font-semibold px-8 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300">
-            Register New Face
+          <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold px-10 py-4 rounded-2xl shadow-2xl shadow-purple-500/25 hover:shadow-purple-500/40 transition-all duration-500 transform hover:scale-105 border border-purple-400/30 backdrop-blur-sm">
+            <span className="flex items-center gap-3">
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
+              </svg>
+              Register New Face
+            </span>
           </Button>
         </Link>
       </div>
 
-      {/* Video & Canvas */}
-      <div className="relative w-full max-w-4xl aspect-video rounded-3xl overflow-hidden shadow-2xl border-2 border-gray-200 dark:border-gray-700">
+      <div className="relative w-full max-w-5xl aspect-video rounded-3xl overflow-hidden shadow-2xl border border-white/10 backdrop-blur-xl bg-white/5">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-blue-500/10 rounded-3xl"></div>
         <video
           ref={videoRef}
           autoPlay
           muted
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover rounded-3xl relative z-10"
         />
         <canvas
           ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full pointer-events-none"
+          className="absolute top-0 left-0 w-full h-full pointer-events-none z-20"
         />
-        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none rounded-3xl z-10" />
+
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-3xl z-30">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto"></div>
+              <p className="text-white font-medium">Initializing Camera...</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Status Message & Confidence Bar */}
-      <div className="w-full max-w-xl mt-6">
-        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-4 shadow-md border border-gray-200 dark:border-gray-700 text-center">
-          <p className="text-gray-700 dark:text-gray-200 font-medium">
-            {message}
-          </p>
+      <div className="w-full max-w-2xl mt-8 relative z-10">
+        <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/10 text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-blue-400 rounded-full animate-pulse"></div>
+            <p className="text-white font-semibold text-lg">{message}</p>
+          </div>
+
           {confidence > 0 && (
-            <div className="w-full h-2 bg-gray-300 dark:bg-gray-700 rounded-full mt-2">
-              <div
-                className="h-2 bg-indigo-500 dark:bg-indigo-400 rounded-full transition-all duration-300"
-                style={{ width: `${confidence}%` }}
-              />
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-gray-300">
+                <span>Confidence Level</span>
+                <span className="font-bold text-purple-400">{confidence}%</span>
+              </div>
+              <div className="w-full h-3 bg-slate-700/50 rounded-full overflow-hidden backdrop-blur-sm border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-700 ease-out shadow-lg shadow-purple-500/50"
+                  style={{ width: `${confidence}%` }}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Detected Person Card */}
       {detectedPerson && (
-        <div className="w-full max-w-md mt-8 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
-          <h3 className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 text-center">
-            Recognition Successful!
-          </h3>
-          <div className="space-y-2">
-            <div className="flex justify-between bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2">
-              <span className="font-medium text-gray-600 dark:text-gray-300 uppercase">
+        <div className="w-full max-w-lg mt-10 bg-white/5 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 p-8 space-y-6 relative z-10 animate-in slide-in-from-bottom-4 duration-500">
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-green-500/25">
+              <svg
+                className="w-8 h-8 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+              Recognition Successful!
+            </h3>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center bg-white/5 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/10">
+              <span className="font-medium text-gray-300 uppercase tracking-wide text-sm">
                 Name
               </span>
-              <span className="font-semibold text-gray-800 dark:text-gray-100">
+              <span className="font-bold text-white text-lg">
                 {detectedPerson.name}
               </span>
             </div>
+
             {detectedPerson.rollNo && (
-              <div className="flex justify-between bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2">
-                <span className="font-medium text-gray-600 dark:text-gray-300 uppercase">
+              <div className="flex justify-between items-center bg-white/5 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/10">
+                <span className="font-medium text-gray-300 uppercase tracking-wide text-sm">
                   Roll No
                 </span>
-                <span className="font-semibold text-gray-800 dark:text-gray-100">
+                <span className="font-bold text-white">
                   {detectedPerson.rollNo}
                 </span>
               </div>
             )}
+
             {detectedPerson.email && (
-              <div className="flex justify-between bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2">
-                <span className="font-medium text-gray-600 dark:text-gray-300 uppercase">
+              <div className="flex justify-between items-center bg-white/5 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/10">
+                <span className="font-medium text-gray-300 uppercase tracking-wide text-sm">
                   Email
                 </span>
-                <span className="font-semibold text-gray-800 dark:text-gray-100 break-all">
+                <span className="font-bold text-white break-all text-sm">
                   {detectedPerson.email}
                 </span>
               </div>
@@ -264,13 +353,27 @@ export default function FaceRecognizer() {
         </div>
       )}
 
-      {/* Scan Again Button */}
       {finished && (
         <Button
           onClick={handleRetry}
-          className="mt-8 bg-indigo-500 dark:bg-indigo-400 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-semibold px-10 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300"
+          className="mt-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold px-12 py-4 rounded-2xl shadow-2xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-500 transform hover:scale-105 border border-blue-400/30 backdrop-blur-sm relative z-10"
         >
-          Scan Again
+          <span className="flex items-center gap-3">
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            Scan Again
+          </span>
         </Button>
       )}
     </div>

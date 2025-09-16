@@ -3,19 +3,20 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import RegisterPage from "@/components/register";
+import SettingsPage from "@/components/settings";
 
-const Register = () => {
+const Settings = () => {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect to /auth if not logged in
+  // Handle redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/auth");
     }
   }, [authLoading, user, router]);
 
+  // While checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -26,10 +27,11 @@ const Register = () => {
     );
   }
 
-  if (!user) return null; // Prevent flash before redirect
+  // If no user, return nothing (until redirect)
+  if (!user) return null;
 
-  // ✅ Authenticated user
-  return <RegisterPage />;
+  // ✅ Authenticated
+  return <SettingsPage />;
 };
 
-export default Register;
+export default Settings;

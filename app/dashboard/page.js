@@ -3,13 +3,13 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import RegisterPage from "@/components/register";
+import ActivityDashboard from "@/components/dashboard";
 
-const Register = () => {
+const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect to /auth if not logged in
+  // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/auth");
@@ -26,10 +26,10 @@ const Register = () => {
     );
   }
 
-  if (!user) return null; // Prevent flash before redirect
+  if (!user) return null; // Avoid flicker before redirect
 
   // ✅ Authenticated user
-  return <RegisterPage />;
+  return <ActivityDashboard />;
 };
 
-export default Register;
+export default Dashboard;

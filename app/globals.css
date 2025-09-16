@@ -3,6 +3,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* globals.css or your main CSS file */
+
+/* Hide SplitText elements until fonts are loaded */
+.split-text {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Show SplitText elements when fonts are ready */
+.fonts-loaded .split-text {
+  opacity: 1;
+}
+
+/* Font display strategy */
+@font-face {
+  font-family: 'YourCustomFont';
+  src: url('/fonts/your-font.woff2') format('woff2');
+  font-display: swap; /* This helps with font loading */
+}
+
+/* Preload critical fonts */
+/* Add this to your HTML head:
+<link rel="preload" href="/fonts/your-font.woff2" as="font" type="font/woff2" crossorigin>
+*/
+
 :root {
   /* Updated color tokens to match Learnova design brief */
   --background: oklch(1 0 0); /* #ffffff */
