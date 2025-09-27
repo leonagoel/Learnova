@@ -129,7 +129,6 @@ export function Navbar() {
   const navigationItems = [
     { href: "/", label: "Home", icon: Home },
     { href: "/activity", label: "Activities", icon: Activity },
-    { href: "/about", label: "About", icon: Info },
     { href: "/contact", label: "Contact", icon: Mail },
   ];
 

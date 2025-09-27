@@ -179,21 +179,31 @@ const AttendancePage = () => {
 
   // Main content - show either validation or recognition based on current step
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950">
       {currentStep === "validation" ? (
-        <>
-        <Navbar/>
-        <AttendanceValidation onValidationSuccess={handleValidationSuccess} />
-        </>
-      ) : (
-        <>
-          <div className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-white/10">
+        <div className="relative">
+          {/* Fixed Navbar for validation */}
+          <div className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-white/10">
             <Navbar />
           </div>
+          {/* Validation content with proper top padding */}
+          <div className="pt-14">
+            <AttendanceValidation
+              onValidationSuccess={handleValidationSuccess}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Fixed Navbar for face recognition */}
+          <div className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-white/10">
+            <Navbar />
+          </div>
+          {/* Face recognition content with proper top padding */}
           <div className="pt-16">
             <FaceRecognizer labels={labels} onBack={handleBackToValidation} />
           </div>
-        </>
+        </div>
       )}
     </div>
   );

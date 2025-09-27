@@ -432,11 +432,14 @@ const TeacherDashboard = () => {
   };
 
   const getUserInitials = () => {
-    return teacher.name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
+    if (user?.displayName) {
+      return user.displayName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase();
+    }
+    return user?.email?.[0]?.toUpperCase() || "T";
   };
 
   const renderDashboard = () => (
@@ -1176,80 +1179,124 @@ const TeacherDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black relative overflow-hidden">
       {/* Premium Navbar */}
       <Navbar />
-
       {/* Animated Gradient Backgrounds */}
       <div className="fixed inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-blue-500/10 pointer-events-none animate-gradientMove" />
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(139,92,246,0.12)_0%,transparent_60%)] pointer-events-none" />
-
+      
       {/* Premium Heading Section */}
       <div className="relative z-10">
-        <div className="max-w-7xl mx-auto pt-24 pb-8 px-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div className="flex items-center gap-6">
-              <div className="relative">
-                {teacher.avatar ? (
-                  <Image
-                    src={teacher.avatar}
-                    alt="Profile"
-                    width={150}
-                    height={150}
-                    className="w-16 h-16 rounded-full border-2 border-accent/50 object-cover shadow-xl"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent via-blue-500 to-purple-500 flex items-center justify-center border-2 border-accent/50 shadow-xl">
-                    <span className="text-lg font-bold text-white">
-                      {getUserInitials()}
-                    </span>
-                  </div>
-                )}
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-black animate-pulse" />
+        <div className="max-w-7xl mx-auto pt-20 pb-6 px-6">
+          <div className="bg-black/20 backdrop-blur-xl rounded-2xl border border-white/10 p-6 shadow-2xl">
+            {/* Main Header Row */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Left - Teacher Profile */}
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {user?.photoURL ? (
+                    <Image
+                      src={user.photoURL}
+                      alt="Profile"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-xl border border-accent/30 object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-blue-500 flex items-center justify-center border border-accent/30">
+                      <span className="text-sm font-bold text-white">
+                        {user?.displayName
+                          ? user.displayName
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()
+                          : user?.email?.[0]?.toUpperCase() || "T"}
+                      </span>
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-black" />
+                </div>
+
+                <div>
+                  <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-white to-accent bg-clip-text text-transparent">
+                    {user?.displayName ||
+                      user?.email?.split("@")[0] ||
+                      "Teacher"}
+                  </h1>
+                  <div className="text-sm text-gray-400">{user?.email}</div>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-white via-accent to-blue-400 bg-clip-text text-transparent drop-shadow-lg">
-                  Teacher Dashboard
-                </h1>
-                <p className="text-gray-300 text-lg font-medium mt-1">
-                  Welcome back,{" "}
-                  <span className="text-accent font-bold">
-                    {teacher.name.split(" ")[1]}
-                  </span>
-                  !
-                </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">
-                    {teacher.id}
-                  </span>
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">
-                    {teacher.department}
-                  </span>
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">
-                    {teacher.designation}
-                  </span>
+
+              {/* Right - Time & Status */}
+              <div className="flex items-center gap-6">
+                {/* Current Time */}
+                <div className="text-right">
+                  <div className="text-xl font-mono text-white">
+                    {currentTime.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {currentTime.toLocaleDateString([], {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex flex-col gap-2">
+                  {attendanceWindow ? (
+                    <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-1">
+                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                      <span className="text-green-400 text-xs font-medium">
+                        Attendance Active
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/30 rounded-lg px-3 py-1">
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      <span className="text-gray-400 text-xs">
+                        Waiting for window
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className="text-2xl font-mono text-white">
-                {currentTime.toLocaleTimeString()}
+
+            {/* Bottom Action Bar */}
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-400">Quick Actions:</span>
+                {attendanceWindow && (
+                  <button
+                    onClick={generatePasscode}
+                    className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2"
+                  >
+                    <Key className="w-3 h-3" />
+                    Generate Passcode
+                  </button>
+                )}
+                <button className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2">
+                  <Download className="w-3 h-3" />
+                  Export Data
+                </button>
               </div>
-              <div className="text-sm text-gray-400">
-                {currentTime.toDateString()}
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">
+                  System Status: Online
+                </span>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               </div>
-              {attendanceWindow && (
-                <div className="flex items-center space-x-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-green-400 text-sm font-medium">
-                    Attendance Window Open
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Navigation Tabs */}
-      <div className="relative z-10 max-w-7xl mx-auto px-6 mt-8">
+      {/* Simple Navigation Tabs */}
+      <div className="relative z-10 max-w-7xl mx-auto px-6 mt-4">
         <div className="flex space-x-1 bg-black/20 backdrop-blur-xl rounded-2xl p-1 border border-white/10">
           {[
             { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -1259,14 +1306,14 @@ const TeacherDashboard = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              className={`flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-xl font-medium transition-all duration-300 ${
                 activeTab === tab.id
                   ? "bg-gradient-to-r from-accent to-blue-500 text-white shadow-lg"
                   : "text-gray-400 hover:text-white hover:bg-white/5"
               }`}
             >
-              <tab.icon className="w-5 h-5" />
-              <span>{tab.label}</span>
+              <tab.icon className="w-4 h-4" />
+              <span className="text-sm">{tab.label}</span>
             </button>
           ))}
         </div>
@@ -1289,7 +1336,6 @@ const TeacherDashboard = () => {
           animation: gradientMove 12s ease-in-out infinite;
         }
       `}</style>
-
       {/* Main Content */}
       <div className="relative z-10 container mx-auto px-6 py-8">
         {activeTab === "dashboard" && renderDashboard()}

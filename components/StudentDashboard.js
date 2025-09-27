@@ -30,6 +30,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Navbar } from "./Navbar";
+import { useAuth } from "@/hooks/useAuth";
 
 const StudentDashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -44,17 +45,7 @@ const StudentDashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [upcomingClass, setUpcomingClass] = useState(null);
   const [isAttendanceWindow, setIsAttendanceWindow] = useState(false);
-
-  // Mock user data - you'd get this from your auth context
-  const [user] = useState({
-    name: "Alex Johnson",
-    rollNo: "CS21B1001",
-    email: "alex.johnson@example.com",
-    avatar: null,
-    course: "Computer Science",
-    semester: "6th Semester",
-    section: "A",
-  });
+  const { user } = useAuth();
 
   // Mock schedule data
   const weeklySchedule = {
@@ -245,57 +236,84 @@ const StudentDashboard = () => {
 
       {/* Premium Heading Section */}
       <div className="relative z-10">
-        <div className="max-w-7xl mx-auto pt-24">
-          <div className="flex px-10 flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div className="flex items-center gap-6">
-              <div className="relative">
-                {user.avatar ? (
-                  <Image
-                    src={user.avatar}
-                    alt="Profile"
-                    width={150}
-                    height={150}
-                    className="w-16 h-16 rounded-full border-2 border-accent/50 object-cover shadow-xl"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-accent via-blue-500 to-purple-500 flex items-center justify-center border-2 border-accent/50 shadow-xl">
-                    <span className="text-lg font-bold text-white">
-                      {getUserInitials()}
-                    </span>
-                  </div>
-                )}
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-black animate-pulse" />
+        <div className="max-w-7xl mx-auto pt-20 pb-6 px-6">
+          <div className="bg-black/20 backdrop-blur-xl rounded-2xl border border-white/10 p-6 shadow-2xl">
+            {/* Main Header Row */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Left - Teacher Profile */}
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {user?.photoURL ? (
+                    <Image
+                      src={user.photoURL}
+                      alt="Profile"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-xl border border-accent/30 object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-blue-500 flex items-center justify-center border border-accent/30">
+                      <span className="text-sm font-bold text-white">
+                        {user?.displayName
+                          ? user.displayName
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()
+                          : user?.email?.[0]?.toUpperCase() || "T"}
+                      </span>
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-black" />
+                </div>
+
+                <div>
+                  <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-white to-accent bg-clip-text text-transparent">
+                    {user?.displayName ||
+                      user?.email?.split("@")[0] ||
+                      "Teacher"}
+                  </h1>
+                  <div className="text-sm text-gray-400">{user?.email}</div>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-white via-accent to-blue-400 bg-clip-text text-transparent drop-shadow-lg animate-fadeIn">
-                  Student Dashboard
-                </h1>
-                <p className="text-gray-300 text-lg font-medium mt-1 animate-fadeIn">
-                  Welcome back, <span className="text-accent font-bold">{user.name.split(" ")[0]}</span>!
-                </p>
-                <div className="flex items-center gap-2 mt-2 animate-fadeIn">
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">{user.rollNo}</span>
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">{user.section}</span>
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">{user.course}</span>
-                  <span className="text-xs text-gray-400 bg-black/40 px-2 py-1 rounded-lg border border-white/10">{user.semester}</span>
+
+              {/* Right - Time & Status */}
+              <div className="flex items-center gap-6">
+                {/* Current Time */}
+                <div className="text-right">
+                  <div className="text-xl font-mono text-white">
+                    {currentTime.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {currentTime.toLocaleDateString([], {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className="text-2xl font-mono text-white animate-fadeIn">
-                {currentTime.toLocaleTimeString()}
+
+            {/* Bottom Action Bar */}
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-400">Quick Actions:</span>
+                <button className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2">
+                  <Download className="w-3 h-3" />
+                  Export Data
+                </button>
               </div>
-              <div className="text-sm text-gray-400 animate-fadeIn">
-                {currentTime.toDateString()}
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">
+                  System Status: Online
+                </span>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               </div>
-              {isAttendanceWindow && (
-                <div className="flex items-center space-x-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 animate-fadeIn">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-green-400 text-sm font-medium">
-                    Attendance Window Open
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -304,20 +322,32 @@ const StudentDashboard = () => {
       {/* ...existing code... */}
       <style jsx>{`
         @keyframes gradientMove {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
         }
         .animate-gradientMove {
           background-size: 200% 200%;
           animation: gradientMove 12s ease-in-out infinite;
         }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         .animate-fadeIn {
-          animation: fadeIn 0.8s cubic-bezier(0.4,0,0.2,1) both;
+          animation: fadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) both;
         }
       `}</style>
 

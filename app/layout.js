@@ -2,6 +2,7 @@
 import React from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import LearnovaChatbot from "@/components/ChatBot";
@@ -231,6 +232,14 @@ export default function RootLayout({ children }) {
             <div className="z-50">
               <LearnovaChatbot />
             </div>
+            <Toaster
+              position="top-right" // default; see below for options
+              toastOptions={{
+                // defaults for all toasts
+                duration: 4000,
+                style: { fontWeight: 600 },
+              }}
+            />
           </Suspense>
         </AuthProvider>
       </body>

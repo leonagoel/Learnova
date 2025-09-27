@@ -291,22 +291,6 @@ const SmartNoticeBoard = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="w-16 h-16 bg-gradient-to-r from-accent to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Bell className="w-8 h-8" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2">Access Restricted</h2>
-          <p className="text-gray-400">
-            Please log in to view the notice board.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black relative overflow-hidden pt-20">
       {/* Background Effects */}
