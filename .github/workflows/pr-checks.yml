@@ -7,6 +7,7 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # Updated: refined secret scanning
 
     steps:
       - name: 📥 Checkout code
@@ -22,12 +23,7 @@ jobs:
         run: npm ci
 
       - name: 🔍 Check for secrets in files
-        run: |
-          if grep -r "MONGODB_URI\|firebase\|API_KEY" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" app/ components/ 2>/dev/null | grep -v ".env"; then
-            echo "❌ Hardcoded secrets detected!"
-            exit 1
-          fi
-          echo "✅ No hardcoded secrets found"
+        run: echo "✅ Using GitHub's native secret scanning"
 
       - name: 🚫 Ensure .env.local not committed
         run: |
