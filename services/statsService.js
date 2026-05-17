@@ -1,5 +1,30 @@
 import { db } from "@/lib/firebaseConfig";
-import { doc, setDoc, updateDoc, increment, getDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  increment,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+
+function getWeekdaysSinceYearStart() {
+  const start = new Date(new Date().getFullYear(), 0, 1);
+  const end = new Date();
+  let weekdays = 0;
+
+  for (let day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+    const weekday = day.getDay();
+    if (weekday >= 1 && weekday <= 5) {
+      weekdays += 1;
+    }
+  }
+
+  return Math.max(weekdays, 1);
+}
 
 /**
  * Initializes a new user's statistics in Firestore.
@@ -19,7 +44,6 @@ export const initializeUserStats = async (userId) => {
 
   try {
     await setDoc(statsRef, defaultStats);
-    console.log("Stats initialized for user:", userId);
   } catch (error) {
     console.error("Error initializing stats:", error);
   }
@@ -39,7 +63,6 @@ export const updateUserStat = async (userId, statField, value = 1) => {
     const statsSnap = await getDoc(statsRef);
     
     if (!statsSnap.exists()) {
-      // If doc doesn't exist for some reason, create it first
       await initializeUserStats(userId);
     }
 
@@ -47,8 +70,46 @@ export const updateUserStat = async (userId, statField, value = 1) => {
       [statField]: increment(value),
       lastUpdated: new Date()
     });
-    console.log(`Updated ${statField} for user:`, userId);
   } catch (error) {
     console.error(`Error updating ${statField}:`, error);
+  }
+};
+
+/**
+ * Recomputes attendance rate from persisted attendance_records.
+ * @param {string} userId - Firebase Auth user id.
+ */
+export const recalculateAttendanceRate = async (userId) => {
+  if (!userId || !db) {
+    return;
+  }
+
+  const statsRef = doc(db, "userStats", userId);
+  const attendanceQuery = query(
+    collection(db, "attendance_records"),
+    where("userId", "==", userId)
+  );
+
+  try {
+    const statsSnap = await getDoc(statsRef);
+    if (!statsSnap.exists()) {
+      await initializeUserStats(userId);
+    }
+
+    const attendanceSnap = await getDocs(attendanceQuery);
+    const presentDays = attendanceSnap.size;
+    const totalDays = getWeekdaysSinceYearStart();
+    const rate = Math.min(100, Math.round((presentDays / totalDays) * 100));
+
+    await updateDoc(statsRef, {
+      "Attendance Rate": `${rate}%`,
+      attendancePresentDays: presentDays,
+      lastUpdated: new Date(),
+    });
+
+    return rate;
+  } catch (error) {
+    console.error("Error recalculating attendance rate:", error);
+    throw error;
   }
 };

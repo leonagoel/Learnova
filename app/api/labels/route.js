@@ -7,7 +7,7 @@ export async function GET() {
     const users = db.collection("users");
 
     const allUsers = await users
-      .find({}, { projection: { _id: 0 } }) // exclude _id
+      .find({}, { projection: { _id: 0 } })
       .toArray();
 
     return NextResponse.json(

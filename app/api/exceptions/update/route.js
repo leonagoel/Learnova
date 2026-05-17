@@ -1,25 +1,26 @@
 import { connectDb } from "@/lib/mongodb";
 import { verifyFirebaseToken } from "@/lib/firebase-admin";
 import { ObjectId } from "mongodb";
+import { jsonError, jsonSuccess } from "@/lib/api-response";
 
 export async function PUT(request) {
   try {
-    // Get the authorization header
     const authorization = request.headers.get("authorization");
     const token = authorization?.split(" ")[1];
 
-    // Verify Firebase token
     const decodedToken = await verifyFirebaseToken(token);
 
     if (!decodedToken) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse request body
     const body = await request.json();
     const { exceptionId, status, comments } = body;
 
-    // Connect to database
+    if (!exceptionId) {
+      return jsonError("exceptionId is required", 400);
+    }
+
     const db = await connectDb();
 
     const result = await db.collection("exceptions").updateOne(

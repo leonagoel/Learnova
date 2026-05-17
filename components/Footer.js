@@ -10,6 +10,7 @@ export default function Footer() {
     { label: "Activities", href: "/activity" },
     { label: "Contact", href: "/contact" },
     { label: "Register", href: "/register" },
+    { label: "Contributors", href: "/contributors" },
   ];
 
   const sectionLinks = [
@@ -101,7 +102,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col gap-4 border-t border-slate-800/80 pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>(c) {currentYear} Learnova. All rights reserved.</p>
+          <p>&copy; {currentYear} Learnova. All rights reserved.</p>
           <div className="flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.2em] text-slate-500">
             <span className="text-purple-300/80">Trusted by educators</span>
             <span className="hidden h-1 w-1 rounded-full bg-slate-700 sm:inline-block" />

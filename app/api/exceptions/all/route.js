@@ -1,23 +1,20 @@
 import { connectDb } from "@/lib/mongodb";
 import { verifyFirebaseToken } from "@/lib/firebase-admin";
+import { jsonError, jsonSuccess } from "@/lib/api-response";
 
 export async function GET(request) {
   try {
-    // Get the authorization header
     const authorization = request.headers.get("authorization");
     const token = authorization?.split(" ")[1];
 
-    // Verify Firebase token
     const decodedToken = await verifyFirebaseToken(token);
 
     if (!decodedToken) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Connect to database
     const db = await connectDb();
 
-    // Fetch all exception requests, sorted by creation date (newest first)
     const exceptions = await db
       .collection("exceptions")
       .find({})
