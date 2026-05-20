@@ -111,16 +111,14 @@ export default function AuthPage() {
         });
       }
 
-      if (result.success) {
-        if (result.needsVerification) {
-          router.push("/verify");
-        } else if (result.needsProfile) {
-          router.push("/profile");
-        } else {
-          redirectBasedOnRole(result.userData.role, router);
-        }
+      if (result.needsVerification) {
+        router.push("/verify");
+      } else if (result.needsProfile) {
+        router.push("/profile");
+      } else if (result.success) {
+        redirectBasedOnRole(result.userData.role, router);
       } else {
-        setErrors({ submit: result.error });
+        setErrors({ submit: result.error || "Something went wrong. Please try again." });
       }
     } catch (err) {
       console.error("Auth error:", err);
