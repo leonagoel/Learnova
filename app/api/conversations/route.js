@@ -2,11 +2,11 @@ import { connectDb } from "@/lib/mongodb";
 import { verifyFirebaseToken } from "@/lib/firebase-admin";
 import { jsonError, jsonSuccess } from "@/lib/api-response";
 import { z } from "zod";
+import xss from "xss";
 
 const sanitizeText = (text) => {
   if (typeof text !== "string") return "";
-  // Strip <script> tags to prevent XSS injection
-  return text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "").trim();
+  return xss(text).trim();
 };
 
 const conversationSchema = z.object({
