@@ -28,10 +28,15 @@ export async function GET(request) {
     // 2. Token Authentication Check
     const authorization = request.headers.get("authorization");
     const token = authorization?.split(" ")[1];
+
+    if (!token) {
+      return jsonError("Unauthorized: No token provided", 401);
+    }
+
     const decodedToken = await verifyFirebaseToken(token);
 
     if (!decodedToken) {
-      return jsonError("Unauthorized", 401);
+      return jsonError("Unauthorized: Invalid token", 401);
     }
 
     // 3. Fetch Data with Projection
