@@ -95,22 +95,24 @@ export function Navbar() {
     };
   }, [handleClickOutside]);
 
-  // ESC Key Support
+  // ESC Key Support — also listens to the global learnova:escape custom event
   useEffect(() => {
+    const close = () => {
+      setIsDropdownOpen(false);
+      setIsNotificationOpen(false);
+      setIsMenuOpen(false);
+    };
     const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setIsDropdownOpen(false);
-        setIsNotificationOpen(false);
-      }
+      if (event.key === "Escape") close();
     };
 
     window.addEventListener("keydown", handleEscape);
+    window.addEventListener("learnova:escape", close);
 
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        handleEscape
-      );
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("learnova:escape", close);
+    };
   }, []);
 
   // Prevent body scroll
@@ -330,21 +332,9 @@ export function Navbar() {
                 );
               })}
 
-              { true ? (
+              { isAuthenticated ? (
                 <div className="flex items-center space-x-2 md:space-x-4 ml-2 md:ml-6">
-                 <button
-                  onClick={() =>
-                    addNotification({
-                      message: "Test notification works!",
-                      time: "Just now",
-                      read: false,
-                      type: "success",
-                    })
-                  }
-                  className="bg-blue-500 text-white px-3 py-1 rounded"
-                >
-                  Test Notification
-                </button>
+                
                   <Button asChild className="hidden md:block relative bg-gradient-to-r from-accent to-blue-500 hover:from-accent/90 hover:to-blue-600 text-white font-medium shadow-lg hover:shadow-2xl hover:shadow-accent/30 transition-all duration-300 hover:scale-105 group overflow-hidden">
                     <Link href="/attendance">
                       <span className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -373,6 +363,8 @@ export function Navbar() {
                           !isNotificationOpen
                         )
                       }
+                      aria-label="Open notifications"
+                      aria-expanded={isNotificationOpen}
                       className="relative p-2 rounded-xl text-white hover:bg-white/5"
                     >
                       <Bell className="h-5 w-5" />
@@ -396,6 +388,7 @@ export function Navbar() {
                               onClick={
                                 markAllAsRead
                               }
+                              aria-label="Mark all notifications as read"
                               className="text-xs text-accent"
                             >
                               Mark all as read
@@ -405,12 +398,12 @@ export function Navbar() {
 
                         <div className="max-h-72 overflow-y-auto">
                           {notifications.map((n) => (
-                            <div
+                            <button
                               key={n.id}
                               onClick={() =>
-                                markAsRead(n.id)
-                              }
-                              className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 ${
+                              markAsRead(n.id)
+                          }
+                              className={`w-full text-left p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 ${
                                 !n.read
                                   ? "bg-accent/5"
                                   : ""
@@ -423,7 +416,7 @@ export function Navbar() {
                               <p className="text-xs text-white/40 mt-1">
                                 {n.time}
                               </p>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -441,6 +434,8 @@ export function Navbar() {
                           !isDropdownOpen
                         )
                       }
+                      aria-label="Open user menu"
+                      aria-expanded={isDropdownOpen}
                       className="flex items-center space-x-3 p-2 rounded-xl text-white hover:bg-white/5"
                     >
                       <div className="relative w-10 h-10">
@@ -487,7 +482,7 @@ export function Navbar() {
                     </button>
 
                     {isDropdownOpen && (
-                      <div className="absolute right-0 mt-3 min-w-64 bg-black/95 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/20 py-2 z-[52]">
+                      <div className="absolute right-0 mt-3 min-w-64 bg-black/95 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/20 py-2 z-[100] overflow-hidden">
                         {userMenuItems.map(
                           (item) => (
                             <Link
@@ -559,7 +554,8 @@ export function Navbar() {
       {/* Mobile Menu */}
       {isMenuOpen && (
         <>
-          <div
+          <button
+            aria-label="Close mobile menu"
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[49] md:hidden"
             onClick={() =>
               setIsMenuOpen(false)
@@ -575,6 +571,7 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label="Close menu"
                 onClick={() =>
                   setIsMenuOpen(false)
                 }
