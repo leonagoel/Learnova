@@ -78,11 +78,13 @@ export async function PATCH(request) {
     const authorization = request.headers.get("authorization");
     const token = authorization?.split(" ")[1];
 
-   const authResult = await verifyFirebaseToken(token);
+    const authResult = await verifyFirebaseToken(token);
 
-    if (!decodedToken) {
+    if (!authResult.valid) {
       return jsonError("Unauthorized", 401);
     }
+
+    const decodedToken = authResult.decodedToken;
 
     const body = await request.json();
     const parsed = settingsSchema.safeParse(body);
@@ -92,9 +94,8 @@ export async function PATCH(request) {
     }
 
     const { userId: bodyUserId, ...settings } = parsed.data;
-    
+
     let targetUserId = decodedToken.uid;
-    let isOperatorAdmin = false;
 
     if (bodyUserId && bodyUserId !== decodedToken.uid) {
       const profile = await getUserProfile(decodedToken.uid);
@@ -102,7 +103,6 @@ export async function PATCH(request) {
         return jsonError("Forbidden: You are not authorized to update another user's settings.", 403);
       }
       targetUserId = bodyUserId;
-      isOperatorAdmin = true;
     }
 
     const db = await connectDb();
@@ -112,7 +112,6 @@ export async function PATCH(request) {
       { $set: { ...settings, updatedAt: new Date() } },
       { upsert: true }
     );
-
 
     return jsonSuccess({ message: "Settings saved successfully" }, 200);
   } catch (error) {
