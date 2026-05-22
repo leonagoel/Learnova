@@ -18,9 +18,16 @@ let _cacheExpiry = 0;
  */
 async function fetchPublicKeys() {
   const now = Date.now();
+  
+  // L1 Cache: Fast in-memory return if the current Edge isolate is still alive
   if (_cachedKeys && now < _cacheExpiry) return _cachedKeys;
 
-  const res = await fetch(JWKS_URL);
+  // L2 Cache: Next.js Data Cache to prevent 429 Rate Limit errors across new Edge isolates
+  const res = await fetch(JWKS_URL, {
+    cache: "force-cache",
+    next: { revalidate: 21600 } // Cache response at the edge for 6 hours (21600 seconds)
+  });
+  
   if (!res.ok) {
     throw new Error(`JWKS fetch failed: ${res.status}`);
   }
