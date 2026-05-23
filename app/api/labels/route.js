@@ -92,7 +92,10 @@ export async function GET(
         token
       );
 
-    if (!authResult.valid) {
+    if (
+      !authResult ||
+      !authResult.valid
+    ) {
       return jsonError(
         {
           message:
