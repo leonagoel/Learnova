@@ -24,7 +24,7 @@ import {
 import DashboardSkeleton from "@/components/ui/DashboardSkeleton";
 import ChartSkeleton from "@/components/ui/ChartSkeleton";
 
-import Navbar from "./Navbar";
+import { Navbar } from "./Navbar";
 import { useAuth } from "@/hooks/useAuth";
 
 import AttendanceChart from "./AttendanceChart";
@@ -35,12 +35,25 @@ import {
 } from "@/constants/mockData";
 
 const AttendanceHeatmap = dynamic(
-  () => import("./AttendanceHeatmap"),
+  () => import("./AttendanceHeatmap.jsx"),
   {
     ssr: false,
     loading: () => <ChartSkeleton variant="heatmap" />,
   }
 );
+
+const AttendanceCalendar = dynamic(
+  () => import("./AttendanceCalendar.jsx"),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton variant="heatmap" />,
+  }
+);
+
+import AttendanceAnalytics from "./dashboard/AttendanceAnalytics";
+import StreakCounter from "./gamification/StreakCounter";
+import XpProgressBar from "./gamification/XpProgressBar";
+import BadgeGallery from "./gamification/BadgeGallery";
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -52,15 +65,30 @@ const StudentDashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [upcomingClass, setUpcomingClass] = useState(null);
   const [isAttendanceWindow, setIsAttendanceWindow] = useState(false);
+  const [gamificationData, setGamificationData] = useState(null);
+  const [viewMode, setViewMode] = useState("heatmap");
 
-  // Mock attendance stats
-  const attendanceStats = {
-    present: 18,
-    absent: 2,
-    late: 1,
-    percentage: 90,
-  };
+  useEffect(() => {
+    const fetchGamification = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/student/gamification", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGamificationData(data);
+        }
+      } catch (err) {
+        console.error("Failed to load gamification data", err);
+      }
+    };
+    if (user) {
+      fetchGamification();
+    }
+  }, [user]);
 
+  // Mock schedule data is now imported from @/constants/mockData
   useEffect(() => {
     const loadingTimer = setTimeout(() => {
       setLoading(false);
@@ -353,7 +381,10 @@ const StudentDashboard = () => {
                   Attendance Overview
                 </h2>
 
-                <button className="text-accent hover:text-accent/80 transition-colors">
+                <button
+                  className="text-accent hover:text-accent/80 transition-colors"
+                  aria-label="Refresh attendance overview"
+                >
                   <RefreshCw className="w-5 h-5" />
                 </button>
               </div>
@@ -417,7 +448,10 @@ const StudentDashboard = () => {
                   Recent Activity
                 </h2>
 
-                <button className="text-accent hover:text-accent/80 transition-colors">
+                <button
+                  className="text-accent hover:text-accent/80 transition-colors"
+                  aria-label="Download recent activity"
+                >
                   <Download className="w-5 h-5" />
                 </button>
               </div>
@@ -468,8 +502,39 @@ const StudentDashboard = () => {
               </div>
             </div>
 
-            {/* Heatmap */}
-            <AttendanceHeatmap />
+            {/* Heatmap / Calendar View */}
+            <div>
+              <div className="flex justify-end mb-4">
+                <div className="bg-black/40 backdrop-blur-md p-1 rounded-xl flex items-center border border-white/10 w-fit">
+                  <button
+                    onClick={() => setViewMode("heatmap")}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      viewMode === "heatmap"
+                        ? "bg-accent text-white shadow-lg"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Heatmap
+                  </button>
+                  <button
+                    onClick={() => setViewMode("calendar")}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      viewMode === "calendar"
+                        ? "bg-accent text-white shadow-lg"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Calendar
+                  </button>
+                </div>
+              </div>
+
+              {viewMode === "heatmap" ? (
+                <AttendanceHeatmap recentActivity={recentActivity} />
+              ) : (
+                <AttendanceCalendar recentActivity={recentActivity} />
+              )}
+            </div>
           </div>
 
           {/* Right */}
@@ -631,7 +696,7 @@ const StudentDashboard = () => {
         }
       `}</style>
     </div>
-  );
+  );  
 };
 
 const StatCard = ({ color, label, value }) => {
@@ -649,14 +714,32 @@ const StatCard = ({ color, label, value }) => {
   const style = styles[color].split(" ");
 
   return (
-    <div
-      className={`bg-gradient-to-br ${style[0]} ${style[1]} rounded-xl p-4 border ${style[2]}`}
-    >
-      <div className={`text-2xl font-bold ${style[3]}`}>
-        {value}
-      </div>
+    <div className="flex flex-col gap-6 p-4 md:p-6 w-full max-w-7xl mx-auto min-h-screen">
+      {/* Gamification Section */}
+      {gamificationData && (
+        <div className="flex flex-col lg:flex-row gap-6 mb-4">
+          <div className="flex flex-col gap-6 flex-1">
+            <div className="flex gap-4 items-center">
+              <StreakCounter currentStreak={gamificationData.currentStreak} />
+              <div className="flex-1">
+                <XpProgressBar 
+                  currentLevel={gamificationData.currentLevel} 
+                  currentXp={gamificationData.totalXp} 
+                />
+              </div>
+            </div>
+            <BadgeGallery unlockedBadges={gamificationData.unlockedBadges} />
+          </div>
+        </div>
+      )}
 
-      <div className={`${style[4]} text-sm`}>{label}</div>
+      {user && user.uid && (
+        <AttendanceAnalytics
+          userId={user.uid}
+          recentActivity={recentActivity}
+        />
+      )}
+      {/* KEEP YOUR ENTIRE EXISTING JSX HERE EXACTLY SAME */}
     </div>
   );
 };
