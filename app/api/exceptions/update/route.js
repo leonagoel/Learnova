@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { connectDb } from "@/lib/mongodb";
-import { getUserProfile } from "@/lib/firebase-admin";
-import { withErrorHandler, authenticateRequest } from "@/lib/error-handler";
+import { getUserProfileByEmail } from "@/lib/firebase-admin";
+import { withErrorHandler } from "@/lib/error-handler";
+import { requireRole } from "@/lib/rbac";
 import { AppError, ValidationError, ForbiddenError, NotFoundError } from "@/lib/errors";
 
 let ObjectId;
@@ -19,19 +20,7 @@ if (process.env.NODE_ENV === "test") {
 }
 
 export const PUT = withErrorHandler(async (request) => {
-  const decodedToken = await authenticateRequest(request);
-
-  // Fetch user profile from Firestore to get the user's role
-  const profile = await getUserProfile(decodedToken.uid);
-
-  if (!profile) {
-    throw new NotFoundError("User profile not found");
-  }
-
-  // Restrict access to admin and teacher roles only (return 403 Forbidden otherwise)
-  if (profile.role !== "admin" && profile.role !== "teacher") {
-    throw new ForbiddenError("Forbidden");
-  }
+  const { payload: decodedToken, profile } = await requireRole(request, ["admin", "teacher"]);
 
   const body = await request.json();
   const { exceptionId, status, comments } = body;
@@ -56,7 +45,7 @@ export const PUT = withErrorHandler(async (request) => {
     const exception = await db.collection("exceptions").findOne({ _id: new ObjectId(exceptionId) });
 
     if (!exception) {
-      return jsonError("Exception not found", 404);
+      throw new NotFoundError("Exception not found");
     }
 
     // Perform teacher-specific assignment validation (CWE-639 resolution)
@@ -83,7 +72,7 @@ export const PUT = withErrorHandler(async (request) => {
       }
 
       if (!isAuthorized) {
-        return jsonError("Forbidden: You are not authorized to update exception requests for this class/student.", 403);
+        throw new ForbiddenError("Forbidden: You are not authorized to update exception requests for this class/student.");
       }
     }
 
