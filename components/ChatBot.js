@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useRef, useEffect } from "react";
 import { CONTACT_INFO } from '../constants/contact'; // Note: Adjust path if needed
+import { FixedSizeList as List } from 'react-window';
 
 import {
   Send,
@@ -34,6 +35,58 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+// Row component for virtual scrolling
+const MessageRow = ({ index, style, data }) => {
+  const { messages, isDarkMode, markdownComponents, themeClasses } = data;
+  const message = messages[index];
+
+  return (
+    <div style={style} className="px-3 py-2">
+      <div
+        className={`flex ${message.isBot ? "justify-start" : "justify-end"}`}
+      >
+        <div
+          className={`flex max-w-sm lg:max-w-md ${message.isBot ? "flex-row" : "flex-row-reverse"
+            } items-end space-x-2`}
+        >
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.isBot
+              ? themeClasses.message.avatar.bot
+              : themeClasses.message.avatar.user
+              }`}
+          >
+            {message.isBot ? <Bot size={16} /> : <User size={16} />}
+          </div>
+          <div
+            className={`px-4 py-3 rounded-2xl shadow-sm ${message.isBot
+              ? themeClasses.message.bot
+              : themeClasses.message.user
+              }`}
+          >
+            {message.isBot ? (
+              <ReactMarkdown
+                components={markdownComponents}
+              >
+                {message.text}
+              </ReactMarkdown>
+            ) : (
+              <p className="text-sm whitespace-pre-line leading-relaxed">
+                {message.text}
+              </p>
+            )}
+            <p className="text-xs mt-2 opacity-70">
+              {new Date(message.timestamp).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const LearnovaChatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -49,8 +102,9 @@ const LearnovaChatbot = () => {
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentCategory, setCurrentCategory] = useState("general");
+  const [hasApiKey, setHasApiKey] = useState(false);
 
-  const messagesEndRef = useRef(null);
+  const listRef = useRef(null);
 
   // Enhanced knowledge base with your platform features
   const learnovaKnowledge = {
@@ -160,7 +214,9 @@ const LearnovaChatbot = () => {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (listRef.current) {
+      listRef.current.scrollToItem(messages.length - 1);
+    }
   };
 
   useEffect(scrollToBottom, [messages]);
@@ -583,79 +639,93 @@ const LearnovaChatbot = () => {
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 p-3 h-96 overflow-y-auto space-y-4 scrollbar-none">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.isBot ? "justify-start" : "justify-end"
-                  }`}
+          <div className="flex-1 h-96 overflow-hidden">
+            {messages.length > 1 ? (
+              <List
+                ref={listRef}
+                height={384}
+                itemCount={messages.length}
+                itemSize={120}
+                itemData={{ messages, isDarkMode, markdownComponents, themeClasses }}
+                width="100%"
               >
-                <div
-                  className={`flex max-w-sm lg:max-w-md ${message.isBot ? "flex-row" : "flex-row-reverse"
-                    } items-end space-x-2`}
-                >
+                {MessageRow}
+              </List>
+            ) : (
+              <div className="p-3 h-full overflow-y-auto">
+                {messages.map((message) => (
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.isBot
-                      ? themeClasses.message.avatar.bot
-                      : themeClasses.message.avatar.user
-                      }`}
+                    key={message.id}
+                    className={`flex ${message.isBot ? "justify-start" : "justify-end"
+                      } mb-4`}
                   >
-                    {message.isBot ? <Bot size={16} /> : <User size={16} />}
-                  </div>
-                  <div
-                    className={`px-4 py-3 rounded-2xl shadow-sm ${message.isBot
-                      ? themeClasses.message.bot
-                      : themeClasses.message.user
-                      }`}
-                  >
-                    {message.isBot ? (
-                      // Use in your ReactMarkdown
-                      <ReactMarkdown
-                        components={markdownComponents}
+                    <div
+                      className={`flex max-w-sm lg:max-w-md ${message.isBot ? "flex-row" : "flex-row-reverse"
+                        } items-end space-x-2`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.isBot
+                          ? themeClasses.message.avatar.bot
+                          : themeClasses.message.avatar.user
+                          }`}
                       >
-                        {message.text}
-                      </ReactMarkdown>
-                    ) : (
-                      <p className="text-sm whitespace-pre-line leading-relaxed">
-                        {message.text}
-                      </p>
-                    )}
-                    <p className="text-xs mt-2 opacity-70">
-                      {new Date(message.timestamp).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                        {message.isBot ? <Bot size={16} /> : <User size={16} />}
+                      </div>
+                      <div
+                        className={`px-4 py-3 rounded-2xl shadow-sm ${message.isBot
+                          ? themeClasses.message.bot
+                          : themeClasses.message.user
+                          }`}
+                      >
+                        {message.isBot ? (
+                          <ReactMarkdown
+                            components={markdownComponents}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
+                        ) : (
+                          <p className="text-sm whitespace-pre-line leading-relaxed">
+                            {message.text}
+                          </p>
+                        )}
+                        <p className="text-xs mt-2 opacity-70">
+                          {new Date(message.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                ))}
 
-            {/* Enhanced Suggested Questions */}
-            {messages.length === 1 && (
-              <div className="space-y-4">
-                <div className="text-center">
-                  <p
-                    className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-600"
-                      }`}
-                  >
-                    💡 Popular questions about{" "}
-                    {categories.find((c) => c.id === currentCategory)?.label}:
-                  </p>
-                  <div className="grid grid-cols-1 gap-2">
-                    {suggestedQuestions[currentCategory]?.map(
-                      (question, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSendMessage(question)}
-                          className={`text-xs px-3 py-2 rounded-lg transition-all duration-200 transform hover:scale-[1.02] text-left ${themeClasses.suggestion}`}
-                        >
-                          {question}
-                        </button>
-                      )
-                    )}
+                {/* Enhanced Suggested Questions */}
+                {messages.length === 1 && (
+                  <div className="space-y-4 mt-4">
+                    <div className="text-center">
+                      <p
+                        className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-600"
+                          }`}
+                      >
+                        💡 Popular questions about{" "}
+                        {categories.find((c) => c.id === currentCategory)?.label}:
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {suggestedQuestions[currentCategory]?.map(
+                          (question, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleSendMessage(question)}
+                              className={`text-xs px-3 py-2 rounded-lg transition-all duration-200 transform hover:scale-[1.02] text-left ${themeClasses.suggestion}`}
+                            >
+                              {question}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -686,7 +756,6 @@ const LearnovaChatbot = () => {
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Quick Contact Info */}
