@@ -21,6 +21,8 @@ export default function AuthForm({
   setFullName,
   instituteName,
   setInstituteName,
+  inviteCode,
+  setInviteCode,
   errors,
   setErrors,
   isLoading,
@@ -48,6 +50,8 @@ export default function AuthForm({
       result = validateName(value, "Full Name");
     } else if (field === "instituteName") {
       result = validateRequired(value, "Institute Name");
+    } else if (field === "inviteCode") {
+      result = validateRequired(value, "Invite Code");
     } else if (field === "email") {
       result = validateEmail(value);
     } else if (field === "password") {
@@ -82,7 +86,7 @@ export default function AuthForm({
                     <IconComponent className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left">
-                    <h4 className="font-semibold text-white">{config.title}</h4>
+                    <h4 className="font-semibold text-card-foreground">{config.title}</h4>
                     <p className="text-muted-foreground text-sm">
                       Click to change role
                     </p>
@@ -101,12 +105,10 @@ export default function AuthForm({
           </h2>
           <p className="text-muted-foreground">
             {isLogin
-              ? `Sign in to your ${
-                  ROLE_CONFIG[selectedRole]?.title.toLowerCase() || "account"
-                } account`
-              : `Create your ${
-                  ROLE_CONFIG[selectedRole]?.title.toLowerCase() || "account"
-                } account`}
+              ? `Sign in to your ${ROLE_CONFIG[selectedRole]?.title.toLowerCase() || "account"
+              } account`
+              : `Create your ${ROLE_CONFIG[selectedRole]?.title.toLowerCase() || "account"
+              } account`}
           </p>
         </div>
 
@@ -125,6 +127,7 @@ export default function AuthForm({
                 </label>
                 <input
                   type="text"
+                  name="fullName"
                   placeholder="Enter your full name"
                   value={fullName}
                   onChange={(e) => {
@@ -136,9 +139,8 @@ export default function AuthForm({
                     }
                   }}
                   onBlur={(e) => validateField("fullName", e.target.value)}
-                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${
-                    errors.fullName ? "border-red-500/50" : "border-border"
-                  }`}
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${errors.fullName ? "border-red-500/50" : "border-border"
+                    }`}
                 />
                 {errors.fullName && (
                   <p className="text-red-400 text-sm mt-1">{errors.fullName}</p>
@@ -152,9 +154,10 @@ export default function AuthForm({
                   </label>
                   <input
                     type="text"
+                    name="instituteName"
                     placeholder="Enter your institute name"
                     value={instituteName}
-                   onChange={(e) => {
+                    onChange={(e) => {
                       const value = e.target.value;
                       setInstituteName(value);
 
@@ -163,11 +166,10 @@ export default function AuthForm({
                       }
                     }}
                     onBlur={(e) => validateField("instituteName", e.target.value)}
-                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${
-                      errors.instituteName
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${errors.instituteName
                         ? "border-red-500/50"
                         : "border-border"
-                    }`}
+                      }`}
                   />
                   {errors.instituteName && (
                     <p className="text-red-400 text-sm mt-1">
@@ -187,6 +189,8 @@ export default function AuthForm({
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="email"
+                name="email"
+                autoComplete="email"
                 placeholder="Enter your email"
                 value={email}
                 onChange={(e) => {
@@ -198,9 +202,8 @@ export default function AuthForm({
                   }
                 }}
                 onBlur={(e) => validateField("email", e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${
-                  errors.email ? "border-red-500/50" : "border-border"
-                }`}
+                className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${errors.email ? "border-red-500/50" : "border-border"
+                  }`}
               />
             </div>
             {errors.email && (
@@ -216,6 +219,8 @@ export default function AuthForm({
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type={showPassword ? "text" : "password"}
+                name="password"
+                autoComplete={isLogin ? "current-password" : "new-password"}
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => {
@@ -227,9 +232,8 @@ export default function AuthForm({
                   }
                 }}
                 onBlur={(e) => validateField("password", e.target.value)}
-                className={`w-full pl-10 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${
-                  errors.password ? "border-red-500/50" : "border-border"
-                }`}
+                className={`w-full pl-10 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground ${errors.password ? "border-red-500/50" : "border-border"
+                  }`}
               />
               <button
                 type="button"
@@ -300,9 +304,8 @@ export default function AuthForm({
                       <div
                         key={index}
                         data-testid={`password-strength-bar-${index}`}
-                        className={`h-full rounded-full transition-all duration-500 ease-out ${
-                          isFilled ? passwordStrength.barClass : "bg-gray-700/50"
-                        }`}
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${isFilled ? passwordStrength.barClass : "bg-gray-700/50"
+                          }`}
                       />
                     );
                   })}
