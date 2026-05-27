@@ -22,7 +22,7 @@ jobs:
       - name: 📚 Install dependencies
         run: |
           rm -rf node_modules package-lock.json
-          npm install --include=optional
+          npm install
 
       - name: 🔍 Check for secrets in files
         run: echo "✅ Using GitHub's native secret scanning"
