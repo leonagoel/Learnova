@@ -1,51 +1,68 @@
 import { NextResponse } from "next/server";
-import { connectDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/rbac";
 import { withErrorHandler } from "@/lib/error-handler";
-import { AppError, ValidationError, NotFoundError } from "@/lib/errors";
+import { checkRateLimit } from "@/lib/rateLimit";
+import { del } from "@vercel/blob";
+import { AppError } from "@/lib/errors";
+import {
+  extractImageFileFromFormData,
+  fetchAndValidateImage,
+  getImageResponseHeaders,
+  getUserImageFromDb,
+  updateUserImageInDb,
+  uploadAvatarToBlob,
+  validateFaceDescriptor,
+} from "@/lib/images/imagesService";
+
+export const dynamic = "force-dynamic";
+
 export const GET = withErrorHandler(async (request) => {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
 
-    if (!id) {
-      throw new ValidationError("Missing user id parameter");
-    }
+  await requireAuth(request);
 
-    await requireAuth(request);
+  const imageUrl = await getUserImageFromDb({ id });
+  const { imageBuffer, contentType } = await fetchAndValidateImage(imageUrl);
 
-    const db = await connectDb();
-    const users = db.collection("users");
+  return new NextResponse(imageBuffer, {
+    status: 200,
+    headers: getImageResponseHeaders(contentType),
+  });
+});
 
-    const { ObjectId } = require("mongodb");
-    let objectId;
-    try {
-      objectId = new ObjectId(id);
-    } catch {
-      throw new ValidationError("Invalid user id");
-    }
+export const POST = withErrorHandler(async (request) => {
+  const decodedToken = await requireAuth(request);
+  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+  const rateLimitResult = await checkRateLimit(`images_post_${ip}_${decodedToken.uid}`);
+  if (!rateLimitResult.allowed) {
+    throw new AppError("Too many attempts. Please try again later.", 429);
+  }
 
-    const user = await users.findOne(
-      { _id: objectId },
-      { projection: { image: 1 } }
-    );
+  const formData = await request.formData();
 
-    if (!user || !user.image) {
-      throw new NotFoundError("Image not found");
-    }
+  // Validate upfront before performing any upload/DB side effects
+  const rawFaceDescriptor = formData.get("faceDescriptor");
+  const faceDescriptor = validateFaceDescriptor(rawFaceDescriptor);
+  const file = extractImageFileFromFormData(formData);
 
-    const imageResponse = await fetch(user.image);
-    if (!imageResponse.ok) {
-      throw new AppError("Failed to fetch image", 502);
-    }
+  // Upload new avatar to Vercel Blob
+  const { blobUrl } = await uploadAvatarToBlob({
+    file,
+    uid: decodedToken.uid,
+  });
 
-    const imageBuffer = await imageResponse.arrayBuffer();
-
-    return new NextResponse(imageBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": imageResponse.headers.get("content-type") || "image/jpeg",
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "X-Content-Type-Options": "nosniff",
-      },
+  try {
+    // Atomically update user image and handle face descriptor (unset if not provided)
+    await updateUserImageInDb({
+      firebaseUid: decodedToken.uid,
+      imageUrl: blobUrl,
+      faceDescriptor,
     });
+  } catch (error) {
+    await del(blobUrl).catch(() => {});
+    throw error;
+  }
+
+  return NextResponse.json({ success: true, url: blobUrl });
 });

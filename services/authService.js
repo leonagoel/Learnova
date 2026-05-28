@@ -8,7 +8,7 @@ import {
   sendEmailVerification,
   signOut,
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import {
   createUserProfile,
   getErrorMessage,
@@ -18,6 +18,30 @@ import { ROLE_CONFIG } from "@/constants/userRoles";
 
 const FIREBASE_CONFIG_ERROR =
   "Firebase is not configured. Please add your Firebase environment variables to .env.local and restart the development server.";
+
+const syncCustomClaims = async ({ user, role, fullName }) => {
+  try {
+    const token = await user.getIdToken();
+    const response = await fetch("/api/auth/set-role", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        role,
+        fullName: fullName?.trim() || "",
+      }),
+    });
+
+    if (response.ok) {
+      // Force refresh token so the custom claims are present in the client-side session immediately
+      await user.getIdToken(true).catch(() => {});
+    }
+  } catch {
+    // Keep login non-blocking if claim migration fails.
+  }
+};
 
 /**
  * Authenticates a user using email and password credentials.
@@ -60,10 +84,18 @@ export const loginWithEmail = async (email, password, selectedRole) => {
         };
       }
 
-      // Update last login
-      await setDoc(doc(db, "users", user.uid), {
-        ...userData,
+      // Update last login — use updateDoc to avoid overwriting the
+      // entire document (including role) with potentially stale data
+      await updateDoc(doc(db, "users", user.uid), {
         lastLogin: new Date(),
+      });
+
+      // Migrate existing users to have cryptographically signed custom
+      // claims.  Fire-and-forget — the login succeeds regardless.
+      void syncCustomClaims({
+        user,
+        role: userData.role,
+        fullName: userData.fullName,
       });
 
       return { success: true, userData };
@@ -114,13 +146,33 @@ export const signupWithEmail = async (
     );
     const user = userCredential.user;
 
-    // Create user profile with role
-    await createUserProfile(user, selectedRole, additionalData);
+    try {
+      // Create user profile with role
+      await createUserProfile(user, selectedRole, additionalData);
 
-    // Send verification email to new users
-    await sendEmailVerification(user);
+      // Send verification email to new users
+      await sendEmailVerification(user);
 
-    return { success: true, needsVerification: true };
+      return { success: true, needsVerification: true };
+    } catch (profileError) {
+      // Clean up the orphaned user account using server-side Admin SDK
+      // Client-side deleteUser() fails with auth/requires-recent-login if credential is stale
+      console.error(`[signup] Profile creation failed for user ${user.uid}, initiating cleanup`);
+      
+      try {
+        await fetch("/api/auth/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uid: user.uid }),
+        });
+      } catch (cleanupErr) {
+        console.error(`[signup] Cleanup failed for orphaned account ${user.uid}:`, cleanupErr.message);
+      }
+      
+      await deleteDoc(doc(db, "users", user.uid)).catch(() => {});
+      await deleteDoc(doc(db, "userStats", user.uid)).catch(() => {});
+      throw profileError;
+    }
   } catch (err) {
     return {
       success: false,
@@ -148,11 +200,8 @@ export const loginWithGoogle = async (
 ) => {
   try {
     if (!auth || !db) {
-      console.error("❌ Google Auth Failed: Firebase not initialized. Check console for details.");
       return { success: false, error: FIREBASE_CONFIG_ERROR };
     }
-
-    console.log("🔵 Starting Google OAuth flow for role:", selectedRole);
 
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
@@ -174,7 +223,18 @@ export const loginWithGoogle = async (
         // New Google user signing up - create profile with selected role
         const nameToUse = user.displayName || additionalData.fullName?.trim();
         if (!nameToUse) {
-          // ✅ modular style
+          // Clean up orphaned account via server-side endpoint
+          console.error(`[google-signup] No name provided for user ${user.uid}, initiating cleanup`);
+          try {
+            await fetch("/api/auth/cleanup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ uid: user.uid }),
+            });
+          } catch (cleanupErr) {
+            console.error(`[google-signup] Cleanup failed for orphaned account ${user.uid}:`, cleanupErr.message);
+          }
+          
           await signOut(auth);
           return {
             success: false,
@@ -182,10 +242,28 @@ export const loginWithGoogle = async (
           };
         }
 
-        await createUserProfile(user, selectedRole, {
-          ...additionalData,
-          fullName: nameToUse,
-        });
+        try {
+          await createUserProfile(user, selectedRole, {
+            ...additionalData,
+            fullName: nameToUse,
+          });
+          // Force refresh the token to immediately acquire the new custom claims (role) on the client side
+          await user.getIdToken(true);
+        } catch (profileError) {
+          // Clean up orphaned account via server-side endpoint
+          console.error(`[google-signup] Profile creation failed for user ${user.uid}, initiating cleanup`);
+          try {
+            await fetch("/api/auth/cleanup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ uid: user.uid }),
+            });
+          } catch (cleanupErr) {
+            console.error(`[google-signup] Cleanup failed for orphaned account ${user.uid}:`, cleanupErr.message);
+          }
+          
+          throw profileError;
+        }
 
         // Email is already verified with Google
         return { success: true, userData: { role: selectedRole } };
@@ -207,9 +285,16 @@ export const loginWithGoogle = async (
 
     // Update last login for existing users
     if (userData) {
-      await setDoc(doc(db, "users", user.uid), {
-        ...userData,
+      await updateDoc(doc(db, "users", user.uid), {
         lastLogin: new Date(),
+      });
+
+      // Migrate existing users to have cryptographically signed custom
+      // claims.  Fire-and-forget — the login succeeds regardless.
+      void syncCustomClaims({
+        user,
+        role: userData.role,
+        fullName: userData.fullName,
       });
     }
 
@@ -228,24 +313,34 @@ export const loginWithGoogle = async (
 };
 
 /**
- * Sends a password reset email to the user.
+ * Triggers a password reset email via the secure backend API route.
  * @param {string} email - The user's email address.
  * @returns {Promise<Object>} Result of the password reset request.
  */
 export const resetPassword = async (email) => {
   try {
-    if (!auth) {
-      return { success: false, error: FIREBASE_CONFIG_ERROR };
+    const sanitizedEmail = email.trim().toLowerCase();
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: sanitizedEmail }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error || getErrorMessage(data.error) || "Failed to send reset email. Please try again.",
+      };
     }
 
-    await sendPasswordResetEmail(auth, email);
     return { success: true };
   } catch (err) {
+    console.error("Reset password fetch error:", err);
     return {
       success: false,
-      error:
-        getErrorMessage(err.code) ||
-        "Failed to send reset email. Please try again.",
+      error: "An unexpected error occurred while communicating with the server.",
     };
   }
 };

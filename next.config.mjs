@@ -3,6 +3,10 @@ import withPWAInit from "@ducanh2912/next-pwa";
 const withPWA = withPWAInit({
   dest: "public",
   customWorkerDir: "worker",
+  fallbacks: {
+    document: "/~offline",
+    image: "/offline.html",
+  },
   disable: process.env.NODE_ENV === "development",
   register: true,
   skipWaiting: true,
@@ -12,6 +16,26 @@ const withPWA = withPWAInit({
   workboxOptions: {
     disableDevLogs: true,
     runtimeCaching: [
+      // API routes - NetworkOnly (must be first for priority)
+      {
+        urlPattern: /\/api\/.*/i,
+        handler: "NetworkOnly",
+      },
+      // General pages - NetworkFirst with offline fallback
+      {
+        urlPattern: /^https?:\/\/.*$/,
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "pages",
+          plugins: [
+            {
+              handlerDidError: async () => {
+                return caches.match("/offline.html", { ignoreSearch: true });
+              },
+            },
+          ],
+        },
+      },
       {
         urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
         handler: "CacheFirst",
@@ -56,45 +80,8 @@ const withPWA = withPWAInit({
   },
 });
 
-const ContentSecurityPolicy = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://apis.google.com https://www.gstatic.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.public.blob.vercel-storage.com https://github.com",
-  "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebase.io https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.public.blob.vercel-storage.com https://api.emailjs.com",
-  "media-src 'self' blob:",
-  "worker-src 'self' blob:",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "upgrade-insecure-requests",
-].join("; ");
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(self)" },
-        ],
-      },
-      {
-        source: "/api/:path*",
-        headers: [
-          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" },
-          { key: "Content-Security-Policy", value: ContentSecurityPolicy },
-          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-        ],
-      },
-    ];
-  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
@@ -109,6 +96,21 @@ const nextConfig = {
       encoding: false, // Fixes TensorFlow warning
     };
     return config;
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none';" },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+        ],
+      },
+    ];
   },
 };
 

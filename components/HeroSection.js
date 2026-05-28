@@ -1,8 +1,11 @@
 "use client";
 
 import { Sparkles, Shield, Zap } from "lucide-react";
+import { usePathname } from "next/navigation";
 
-export default function HeroSection() {
+export default function HeroSection({ selectedRole }) {
+  const pathname = usePathname();
+
   return (
     <div>
       {/* Hero Content */}
@@ -17,25 +20,27 @@ export default function HeroSection() {
         </div>
 
         {/* Heading */}
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white">
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-foreground">
           Transforming Education
         </h1>
 
         {/* Subtitle */}
         <p className="text-muted-foreground text-lg max-w-2xl mt-6">
-          Join thousands of professionals who trust our platform for secure
+          Join thousands of {selectedRole == "student"? "students": "professionals"} who trust our platform for secure
           attendance management and seamless academic workflows.
         </p>
 
         {/* CTA Button */}
-        <div className="mt-8 flex justify-center lg:justify-start">
-          <a
-            href="#mission"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all duration-300 shadow-lg"
-          >
-            Explore More ↓
-          </a>
-        </div>
+        { pathname !== "/auth" && (
+          <div className="mt-8 flex justify-center lg:justify-start">
+            <a
+              href="#mission"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-all duration-300 shadow-lg"
+            >
+              Explore More ↓
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Features Grid */}
