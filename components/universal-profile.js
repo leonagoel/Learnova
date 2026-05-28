@@ -277,67 +277,21 @@ export default function UniversalProfile() {
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
-
-    // 1. Explicitly check for allowed image types (.jpg, .jpeg, .png, .webp)
-    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error(
-        "Invalid file type. Only .jpg, .jpeg, .png, and .webp are supported."
-      );
-      e.target.value = ""; // Clear the file input registry cleanly
-      return;
-    }
-
-    // 2. Reduce restriction boundary down to a strict 2MB limit
-    const MAX_SIZE = 2 * 1024 * 1024; 
-
-    if (file.size > MAX_SIZE) {
-      toast.error(
-        "File too large. Maximum image size allowed is 2MB."
-      );
-      e.target.value = ""; // Clear the file input registry cleanly
-      return;
     if (!file) return;
 
-   
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-
-  if (!allowedTypes.includes(file.type)) {
-    toast.error("Invalid file type. Only JPG, PNG, WEBP are allowed.");
-    e.target.value = "";
-    return;
-  }
-
-  const MAX_SIZE = 2 * 1024 * 1024;
-
-  if (file.size > MAX_SIZE) {
-    toast.error("File size exceeds 2MB. Please select a smaller file.");
-    e.target.value = "";
-    return;
-  }
-
-  const loadingToast = toast.loading("Uploading profile picture...");
-  const formData = new FormData();
-  formData.append("file", file);
-
-  try {
-      const res = await fetch("/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error("Upload failed");
-      }
-
-      toast.success("Uploaded!");
-      e.target.value = ""; 
-    } catch (error) {
-      toast.error("Upload failed!");
-    } finally {
-      toast.dismiss(loadingToast);
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Only .jpg, .jpeg, .png, and .webp are supported.");
+      e.target.value = "";
+      return;
     }
-   
+
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      toast.error("File too large. Maximum image size allowed is 2MB.");
+      e.target.value = "";
+      return;
+    }
 
     // Show preview before uploading
     const objectUrl = URL.createObjectURL(file);
