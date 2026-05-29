@@ -50,18 +50,15 @@ export async function POST(request) {
     const firebaseData = await firebaseRes.json();
 
     if (!firebaseRes.ok) {
-      // Firebase throws "EMAIL_NOT_FOUND" when the user isn't registered
-      const errorMessage = firebaseData.error?.message === "EMAIL_NOT_FOUND" 
-        ? "No user found with this email address."
-        : firebaseData.error?.message || "Failed to send reset email.";
-        
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: firebaseRes.status }
-      );
+      // Log the actual error internally for debugging, but do NOT expose it to the client
+      console.warn("Password reset upstream error:", firebaseData.error?.message);
     }
 
-    return NextResponse.json({ success: true });
+    // Always return a generic success message to prevent user enumeration attacks
+    return NextResponse.json({ 
+      success: true, 
+      message: "If an account exists with this email, a password reset link has been sent." 
+    });
   } catch (error) {
     console.error("Password reset error:", error);
     return NextResponse.json(
