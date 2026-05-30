@@ -10,7 +10,8 @@ import {
   Clock, 
   Sparkles, 
   CheckCircle,
-  PlayCircle
+  PlayCircle,
+  Users
 } from "lucide-react";
 import ShareButton from "@/components/ui/ShareButton";
 import StudyDeck from "@/components/flashcards/StudyDeck";
@@ -32,6 +33,7 @@ export default function CourseDetailPage() {
   }
 
   const [mounted, setMounted] = useState(false);
+  const [isPodActive, setIsPodActive] = useState(false);
   const [selectionText, setSelectionText] = useState("");
   const [selectionRect, setSelectionRect] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -61,6 +63,7 @@ export default function CourseDetailPage() {
       { start: 210, text: "Next, we will focus on progressive hydration patterns." }
     ]
   };
+ 
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -182,6 +185,11 @@ export default function CourseDetailPage() {
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-zinc-50 via-zinc-100 to-zinc-400 mb-6 leading-tight">
             {course.title}
           </h1>
+          {/* 2. Outer Layout Splitter Wrapper */}
+          <div className={`flex flex-col ${isPodActive ? "lg:flex-row gap-6 items-start" : "w-full"}`}></div>
+            
+            {/* 3. Left Side Content Area */}
+            <div className={`transition-all duration-300 ${isPodActive ? "w-full lg:flex-1" : "w-full"}`}></div>
           {/* 🌟 AI INTERACTIVE TIMELINE INTERFACE 🌟 */}
           <div className="my-8 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/30 shadow-xl">
             {/* The Video Stream */}
@@ -261,7 +269,19 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                    onClick={toggleStudyPod}
+                    type="button"
+                    className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold transition-all duration-200 select-none border border-zinc-800 backdrop-blur-md ${
+                      isPodActive 
+                        ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 shadow-md" 
+                        : "bg-zinc-900/80 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 shadow-lg"
+                    }`}
+                  >
+                    <Users className="w-5 h-5" />
+                    {isPodActive ? "Close Pod View" : "Start Study Pod"}
+                  </button>
               <button
                 onClick={() => toast.success("Enrolling in course...")}
                 type="button"
@@ -315,6 +335,32 @@ export default function CourseDetailPage() {
               ))}
             </div>
           </section>
+            {/* 5. Right Side Collaborative Live Workspace Panel */}
+            {isPodActive && (
+              <div className="w-full lg:w-[400px] lg:sticky lg:top-24 border border-zinc-800 bg-zinc-900/60 rounded-2xl overflow-hidden h-[calc(100vh-140px)] flex flex-col backdrop-blur-md shadow-2xl z-20 p-4">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-bold text-xs uppercase tracking-wider text-zinc-300">Live Study Pod Active</span>
+                  </div>
+                  <button onClick={() => setIsPodActive(false)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded">Leave</button>
+                </div>
+                
+                <p className="text-xs font-semibold text-zinc-500 uppercase mb-2">Active Members</p>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg aspect-video flex items-center justify-center text-xs text-zinc-400">You</div>
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-lg aspect-video flex items-center justify-center text-xs text-zinc-500">Classmate</div>
+                </div>
+
+                <p className="text-xs font-semibold text-zinc-500 uppercase mb-2">Shared Notepad</p>
+                <textarea 
+                  className="w-full flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs font-mono text-zinc-300 resize-none focus:outline-none"
+                  placeholder="Type shared notes here..."
+                  defaultValue={`# Notes\n- Discussing Server Side processes\n- Reviewing architecture graphs`}
+                />
+              </div>
+            )}
+        </motion.div>
 
           {/* Study / Flashcards */}
           <section className="mb-8">
