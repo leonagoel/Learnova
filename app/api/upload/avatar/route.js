@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { del } from "@vercel/blob";
 import { requireAuth } from "@/lib/rbac";
 import { checkRateLimit } from "@/lib/rateLimit";
-import {
-  extractImageFileFromFormData,
-  uploadAvatarToBlob,
-  updateUserImageInDb,
-} from "@/lib/images/imagesService";
+import { connectDb } from "@/lib/mongodb";
+import { extractImageFileFromFormData, uploadAvatarToBlob } from "@/lib/images/imagesService";
+import { del } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
 
@@ -58,23 +56,40 @@ export const POST = async (request) => {
       );
     }
 
+    // Upload to Vercel Blob instead of storing base64 in MongoDB
+    console.log("Uploading to blob storage...");
     const { blobUrl } = await uploadAvatarToBlob({
       file,
       uid: decodedToken.uid,
     });
 
     try {
-      await updateUserImageInDb({
-        firebaseUid: decodedToken.uid,
-        imageUrl: blobUrl,
-        faceDescriptor: null,
-      });
+      const db = await connectDb();
+      const usersCollection = db.collection("users");
+
+      // Fetch existing avatar URL to clean up old blob if present
+      const existingUser = await usersCollection.findOne(
+        { firebaseUid: decodedToken.uid },
+        { projection: { avatar: 1 } }
+      );
+
+      await usersCollection.updateOne(
+        { firebaseUid: decodedToken.uid },
+        { $set: { avatar: blobUrl } }
+      );
+
+      // Delete old blob after successful DB write
+      const oldAvatar = existingUser?.avatar;
+      if (oldAvatar && oldAvatar.startsWith("https://")) {
+        await del(oldAvatar).catch(() => {});
+      }
     } catch (error) {
+      // Roll back blob upload on DB failure
       await del(blobUrl).catch(() => {});
       throw error;
     }
 
-    console.log("Avatar saved successfully to database");
+    console.log("Avatar saved successfully to blob storage");
     
     return NextResponse.json(
       { 
