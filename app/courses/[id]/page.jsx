@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   BookOpen, 
@@ -13,11 +14,23 @@ import {
   Users
 } from "lucide-react";
 import ShareButton from "@/components/ui/ShareButton";
+import Breadcrumb from "@/components/ui/Breadcrumb";
+import ReadingTimeBadge from "@/components/ui/ReadingTimeBadge";
 import toast from "react-hot-toast";
+import { useParams, useRouter, notFound } from "next/navigation"; // 🌟 Added notFound here
+import { routeParamSchema } from "@/lib/validations/auth"; // 🌟 Added your validation schema
+import MarkdownRenderer from "@/components/ui/MarkdownRenderer";
 
 export default function CourseDetailPage() {
   const params = useParams();
   const router = useRouter();
+  
+  const validationCheck = routeParamSchema.safeParse({ id: params.id });
+  
+  if (!validationCheck.success) {
+    return notFound(); // Gracesfully triggers Next.js 404 handler interface instead of crashing client UI
+  }
+
   const [mounted, setMounted] = useState(false);
   const [isPodActive, setIsPodActive] = useState(false);
   // --- AI TIMELINE FEATURE STATES ---
@@ -73,7 +86,12 @@ export default function CourseDetailPage() {
   const course = {
     id: params.id || "nextjs-mastery",
     title: "Advanced Next.js & React Architecture",
-    description: "Master server components, advanced rendering patterns, state management, and optimized deployment pipelines for modern web applications.",
+    description: `Master **React Server Components (RSC)**, advanced rendering patterns (like *Partial Prerendering*), state management, and optimized deployment pipelines for modern web applications.
+
+### Key Learning Objectives
+- **Server/Client boundary** decoupling for performance.
+- Dynamic caching configurations & middleware orchestration.
+- Scale databases with pooling and high-performance querying.`,
     instructor: "Dr. Elena Rostova",
     duration: "12 hours • 24 lessons",
     difficulty: "Advanced",
@@ -127,6 +145,15 @@ export default function CourseDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
+          {/* Breadcrumb Navigation */}
+          <Breadcrumb
+            paths={[
+              { name: "Home", url: "/" },
+              { name: "Courses", url: "/courses" },
+              { name: course.title, url: `/courses/${course.id}` },
+            ]}
+          />
+
           {/* Badge & Course Header */}
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
@@ -138,6 +165,11 @@ export default function CourseDetailPage() {
               <Clock className="w-3.5 h-3.5 text-zinc-500" />
               {course.duration}
             </span>
+            <span className="text-zinc-500">•</span>
+            <ReadingTimeBadge 
+              text={course.description} 
+              className="text-xs bg-zinc-900 border border-zinc-800/80 px-3 py-1 rounded-full text-zinc-400 hover:text-zinc-200 transition-all duration-200"
+            />
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-zinc-50 via-zinc-100 to-zinc-400 mb-6 leading-tight">
@@ -211,9 +243,9 @@ export default function CourseDetailPage() {
             )}
           </div>
 
-          <p className="text-lg text-zinc-400 mb-8 max-w-3xl leading-relaxed">
-            {course.description}
-          </p>
+          <div className="mb-8 max-w-3xl">
+            <MarkdownRenderer content={course.description} />
+          </div>
 
           {/* Instructor & Action Card */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-6 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 backdrop-blur-sm mb-12">
