@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as jose from "jose";
 import { Redis } from "@upstash/redis";
+import { validateCsrfRequest } from "@/lib/csrf";
 
 const rateLimitMap = new Map();
 const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -42,6 +43,11 @@ const AUTH_RATE_LIMITED_PATHS = [
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
   "/api/auth/verify-otp",
+];
+
+const PUBLIC_API_PATHS = [
+  "/api/auth/csrf",
+  "/api/auth/reset-password",
 ];
 
 function isAuthRoute(pathname) {
@@ -317,9 +323,21 @@ async function verifyIdToken(token) {
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
+  const isUnsafeMethod = !["GET", "HEAD", "OPTIONS"].includes(request.method);
 
   // Clean up expired rate limit entries periodically
   cleanupRateLimitMap();
+
+  if (pathname.startsWith("/api/") && isUnsafeMethod && pathname !== "/api/auth/csrf") {
+    try {
+      validateCsrfRequest(request);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error.message || "Forbidden: invalid CSRF token" },
+        { status: error.statusCode || 403 }
+      );
+    }
+  }
 
   // ── 1. Rate limiting for auth API routes ──
   if (isAuthRoute(pathname)) {
@@ -395,7 +413,8 @@ export async function middleware(request) {
 
   // General API route protection (non-dashboard routes under /api/)
   if (pathname.startsWith("/api/") && pathname !== "/api/check-groq-config") {
-    if (!matchedDashboard) {
+    const isPublicApiRoute = PUBLIC_API_PATHS.some((path) => pathname.startsWith(path));
+    if (!matchedDashboard && !isPublicApiRoute) {
       if (!isTokenValid) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
