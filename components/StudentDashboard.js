@@ -109,27 +109,7 @@ const parseClassStartTime = (time = "") => {
   };
 };
 
-  const [showComplaint, setShowComplaint] =
-    useState(false);
 
-    const [skillPath, setSkillPath] = useState("standard"); 
-    const [showDiagnosticQuiz, setShowDiagnosticQuiz] = useState(true);
-
-    useEffect(() => {
-    const fetchActivity = async () => {
-      try {
-        if (!user?.uid) return;
-        const activities = await getUserActivities(user.uid);
-        const mapped = activities.map(a => ({
-         subject: a.title,
-          date: a.timestamp?.toLocaleDateString() || "",
-          status: a.progress >= 100 ? "present" : "late",
-          }));
-setRecentActivity(mapped);
-      } catch (err) {
-        console.error("Failed to load activity", err);
-      }
-    };
 const getUpcomingClass = (classes, now) => {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -241,6 +221,8 @@ const DashboardHeader = ({ user, currentTime, getInitials }) => (
 
 const StudentDashboard = () => {
   const { user } = useAuth();
+  const [skillPath, setSkillPath] = useState("standard");
+  const [showDiagnosticQuiz, setShowDiagnosticQuiz] = useState(true);
 
   const { recentActivity, gamificationData } = useAttendance({ role: "student", user });
   const { curriculum } = useCurriculum({ role: "student", user });

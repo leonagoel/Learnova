@@ -3,10 +3,7 @@ import { del } from "@vercel/blob";
 import { requireAuth } from "@/lib/rbac";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { connectDb } from "@/lib/mongodb";
-import {
-  extractImageFileFromFormData,
-  uploadAvatarToBlob,
-} from "@/lib/images/imagesService";
+import { extractImageFileFromFormData, uploadAvatarToBlob } from "@/lib/images/imagesService";
 
 export const dynamic = "force-dynamic";
 
