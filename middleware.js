@@ -328,16 +328,9 @@ export async function middleware(request) {
   // Clean up expired rate limit entries periodically
   cleanupRateLimitMap();
 
-  if (pathname.startsWith("/api/") && isUnsafeMethod && pathname !== "/api/auth/csrf") {
-    try {
-      validateCsrfRequest(request);
-    } catch (error) {
-      return NextResponse.json(
-        { error: error.message || "Forbidden: invalid CSRF token" },
-        { status: error.statusCode || 403 }
-      );
-    }
-  }
+  // NOTE: CSRF validation applies only for cookie-authenticated requests.
+  // Requests authenticated via Authorization: Bearer <token> are not CSRF-vulnerable.
+  // Defer CSRF validation until after token extraction/verification below.
 
   // ── 1. Rate limiting for auth API routes ──
   if (isAuthRoute(pathname)) {
@@ -395,6 +388,19 @@ export async function middleware(request) {
       isTokenValid = true;
       isEmailVerified = !!payload.email_verified;
       userRole = payload.role || null;
+    }
+  }
+
+  // Enforce CSRF only for unsafe API methods when the request is authenticated via cookie.
+  const tokenFromCookie = request.cookies.get("authToken")?.value || null;
+  if (pathname.startsWith("/api/") && isUnsafeMethod && tokenFromCookie) {
+    try {
+      validateCsrfRequest(request);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error.message || "Forbidden: invalid CSRF token" },
+        { status: error.statusCode || 403 }
+      );
     }
   }
 
