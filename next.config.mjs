@@ -1,14 +1,15 @@
 /** @type {import('next').NextConfig} */
+import { webcrypto } from 'node:crypto';
 import createNextIntlPlugin from 'next-intl/plugin';
 import withPWAInit from '@ducanh2912/next-pwa';
 
-// Polyfill globalThis.crypto for Node 18 (used by jose in middleware Edge compilation)
-try {
-  const { webcrypto } = await import('node:crypto');
-  if (webcrypto && !globalThis.crypto) {
-    globalThis.crypto = webcrypto;
-  }
-} catch {}
+// Polyfill globalThis.crypto for Node 18 (jose middleware uses Web Crypto API)
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = webcrypto;
+}
+if (!process.env.NODE_OPTIONS?.includes('--experimental-global-webcrypto')) {
+  process.env.NODE_OPTIONS = (process.env.NODE_OPTIONS || '') + ' --experimental-global-webcrypto';
+}
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.js');
 
