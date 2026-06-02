@@ -214,7 +214,9 @@ export async function GET(request) {
 
     for (const settings of allSettings) {
       const threshold = settings.institute.lowAttendanceThreshold || 75;
-      const instituteId = settings.instituteId || settings._id?.toString();
+      const instituteId = settings.instituteId || settings._id?.toString() || settings.userId;
+      if (!instituteId) continue;
+
       const instituteStudents = studentsByInstitute.get(instituteId) || [];
 
       if (instituteStudents.length === 0) continue;
@@ -222,6 +224,12 @@ export async function GET(request) {
       // Load attendance from MongoDB (scoped by institute) for all students in this institute
       const instituteStudentUids = instituteStudents.map(s => s.firebaseUid).filter(Boolean);
       const mongoAttendance = await loadMongoAttendanceByUser(db, instituteId, instituteStudentUids);
+
+      // Build attendanceByUser from mongoAttendance
+      const attendanceByUser = new Map();
+      for (const [uid, records] of mongoAttendance || []) {
+        attendanceByUser.set(uid, records);
+      }
 
       for (const student of instituteStudents) {
         const studentUid = student.firebaseUid;
@@ -233,13 +241,19 @@ export async function GET(request) {
         }
 
         // Use MongoDB attendance data (scoped by institute) instead of Firestore
-        const studentAttendance = mongoAttendance?.get(studentUid) || [];
+        const studentAttendance = attendanceByUser.get(studentUid) || [];
+        const uid = student.uid || student.firebaseUid;
+        if (!uid) continue;
 
+        const studentAttendance = attendanceByUser.get(uid) || [];
         const evaluation = evaluateStudentAttendance(studentAttendance, threshold);
 
         if (evaluation.isBelowThreshold) {
+          const email = student.email;
+          const name = student.name || student.fullName || 'Student';
+
           notificationsToInsert.push({
-            userId: studentUid,
+            userId: uid,
             title: 'Low Attendance Warning',
             message: `Your current attendance is ${evaluation.percentage}%, which is below the required ${threshold}%. Please improve your attendance.`,
             type: 'warning',
@@ -248,16 +262,16 @@ export async function GET(request) {
           });
 
           warningLogsToInsert.push({
-            userId: studentUid,
+            userId: uid,
             percentage: evaluation.percentage,
             threshold,
             createdAt: now,
           });
 
-          if (student.email) {
+          if (email) {
             emailsToSend.push({
-              to_email: student.email,
-              to_name: student.fullName || student.name || 'Student',
+              to_email: email,
+              to_name: name,
               attendance_percentage: evaluation.percentage,
               threshold,
             });
