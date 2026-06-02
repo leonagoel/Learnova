@@ -60,7 +60,7 @@ describe("useSessionMonitor", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/auth");
   });
 
-  it("should not trigger logout for 403 responses (reserved for RBAC)", async () => {
+  it("should not trigger logout for 403 responses", async () => {
     global.fetch = vi.fn().mockResolvedValue({ status: 403 });
 
     renderHook(() => useSessionMonitor());
