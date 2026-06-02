@@ -60,7 +60,6 @@ export const POST = withErrorHandler(async (request) => {
   const resolvedName = userProfile?.fullName || decodedToken.name || decodedToken.displayName || decodedToken.email?.split("@")[0] || "Unknown User";
   const resolvedEmail = userProfile?.email || decodedToken.email || "unknown@learnova.edu";
 
-  let alreadyRecorded = false;
   const sagaResult = await executeSaga({
     operationType: "attendance_record",
     uid: decodedToken.uid,
@@ -98,8 +97,8 @@ export const POST = withErrorHandler(async (request) => {
       },
       {
         name: "write_mongodb_attendance",
-        execute: async () => {
-          if (alreadyRecorded) {
+        execute: async (ctx) => {
+          if (ctx._alreadyRecorded) {
             return;
           }
           const mongoDB = await connectDb();
