@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as jose from "jose";
-import { validateCsrfRequest } from "@/lib/csrf";
+import { Redis } from "@upstash/redis";
+import { validateCsrfOriginAndReferer, validateCsrfRequest } from "@/lib/csrf";
 
 const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const FIREBASE_AUTH_DOMAIN = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -74,14 +75,20 @@ async function getFirebasePublicKeys() {
 
   try {
     const response = await fetch(
-      "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+      "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+      { next: { revalidate: 3600 } } // Cache for 1 hour using Next.js Data Cache
     );
-    if (!response.ok) throw new Error("Failed to fetch public keys");
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch public keys");
+    }
+
     const data = await response.json();
     cachedPublicKey = data;
     publicKeyFetchTime = now;
     return data;
-  } catch {
+  } catch (error) {
+    console.error("Failed to fetch Firebase public keys:", error);
     return cachedPublicKey || {};
   }
 }
@@ -265,10 +272,11 @@ export async function middleware(request) {
   const tokenFromCookie = request.cookies.get("authToken")?.value || null;
   if (pathname.startsWith("/api/") && isUnsafeMethod && tokenFromCookie) {
     try {
+      validateCsrfOriginAndReferer(request);
       validateCsrfRequest(request);
     } catch (error) {
       return NextResponse.json(
-        { error: error.message || "Forbidden: invalid CSRF token" },
+        { error: error.message || "Forbidden: invalid CSRF request" },
         { status: error.statusCode || 403 }
       );
     }
