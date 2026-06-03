@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Brain, Sparkles, TrendingUp, Target } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
+import toast from "react-hot-toast";
 
 export default function AIProductivityInsights({
   analytics,
@@ -45,6 +46,7 @@ export default function AIProductivityInsights({
     }
   } catch (error) {
     console.error(error);
+    toast.error("Failed to generate insights. Please try again.");
   } finally {
     setLoading(false);
   }
