@@ -136,16 +136,15 @@ export async function askQuestion(question, sessionId) {
   if (!sessionId) {
     throw new Error("Retriever not initialised.");
   }
-  console.log("Session ID:", sessionId);
+
   const relevantChunks = await retrieve(question, sessionId);
 
-console.timeEnd("retrieve");
 
-console.log("Retrieved chunks:", relevantChunks.length);
+
+
 
 const context = formatContext(relevantChunks);
 
-console.log("Context length:", context.length);
   // Keep only recent conversation history
   const trimmedHistory = conversationHistory.slice(
     -(MAX_HISTORY_TURNS * 2)
@@ -163,9 +162,9 @@ console.log("Context length:", context.length);
     .map((msg) => msg.content)
     .join("\n\n");
 
-  console.log("Prompt length:", promptText.length);
+  
 
-  console.time("groq");
+  
 
   const response = await fetch("/api/groq", {
     method: "POST",
@@ -177,7 +176,6 @@ console.log("Context length:", context.length);
     }),
   });
 
-  console.timeEnd("groq");
 
   if (!response.ok) {
     const error = await response.json();

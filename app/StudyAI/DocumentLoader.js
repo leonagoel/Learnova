@@ -19,13 +19,14 @@ async function getPdfJs() {
 
   const pdfjs = await import("pdfjs-dist");
 
-  pdfjs.GlobalWorkerOptions.workerSrc =
-    `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.js",
+    import.meta.url
+  ).toString();
 
   pdfjsLib = pdfjs;
   return pdfjsLib;
 }
-
 const SCANNED_CHAR_THRESHOLD = 100;  // chars across first 3 pages — below this = scanned
 const OCR_RENDER_SCALE       = 2.0;  // 2x scale improves Tesseract accuracy significantly
 const OCR_IMAGE_QUALITY      = 0.90; // JPEG quality for canvas → Tesseract

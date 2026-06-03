@@ -128,18 +128,12 @@ export function inspectChunks(chunks) {
   const minLen   = Math.min(...lengths);
   const maxLen   = Math.max(...lengths);
 
-  console.group("📄 Chunk inspection");
-  console.log(`Total chunks : ${chunks.length}`);
-  console.log(`Avg length   : ${avgLen} chars`);
-  console.log(`Min length   : ${minLen} chars`);
-  console.log(`Max length   : ${maxLen} chars`);
-  console.groupEnd();
+
 
   // Preview first 3 chunks
   chunks.slice(0, 3).forEach((chunk, i) => {
     console.group(`Chunk ${i + 1} — page ${chunk.metadata.page}`);
-    console.log(chunk.pageContent.slice(0, 200) + "...");
-    console.log("metadata:", chunk.metadata);
+    
     console.groupEnd();
   });
 }

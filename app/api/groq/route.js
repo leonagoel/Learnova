@@ -28,8 +28,6 @@ export const POST = withErrorHandler(async (request) => {
   const { trimmedMessage, messages } = validation;
   
   const injectionCheck = detectInjection(trimmedMessage);
-  console.log("Injection Check:", injectionCheck);
-console.log("Prompt:", trimmedMessage);
   if (injectionCheck.isInjection) {
     logger.warn(
   `[nova-ai-safety] Injection blocked: ${injectionCheck.matchedPattern}`
@@ -42,9 +40,6 @@ console.log("Prompt:", trimmedMessage);
   try {
     logger.info(`[nova-ai] Making request to Groq API: ${GROQ_API_URL}`);
     try {
-  console.log("BODY RECEIVED:", body);
-  console.log("MESSAGE TYPE:", typeof trimmedMessage);
-  console.log("MESSAGE LENGTH:", trimmedMessage?.length);
 
   const content = await callGroq(sanitizedMessage);
 

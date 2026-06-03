@@ -47,7 +47,6 @@ export const POST = withErrorHandler(async (request) => {
     return jsonError("Session expired", 404);
   }
 
-  console.time("rebuild-vector-store");
 
  try {
   const vectorStore = await MemoryVectorStore.fromDocuments(
@@ -67,19 +66,4 @@ export const POST = withErrorHandler(async (request) => {
     500
   );
 }
-
-  console.timeEnd("rebuild-vector-store");
-
-  console.time("similarity-search");
-
-  const docs = await vectorStore.similaritySearch(
-    query,
-    4
-  );
-
-  console.timeEnd("similarity-search");
-
-  return jsonSuccess({
-    docs,
-  });
 });

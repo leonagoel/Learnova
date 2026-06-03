@@ -29,8 +29,7 @@ export async function buildRetriever(
 
   const data = await response.json();
 
-console.log("Embed API status:", response.status);
-console.log("Embed API response:", data);
+
 
 if (!response.ok) {
   throw new Error(
@@ -73,7 +72,6 @@ export async function retrieve(query, sessionId) {
 
   const data = await response.json();
 
-  console.log("Retrieve response:", data);
 
   if (!response.ok) {
     throw new Error(
