@@ -228,13 +228,6 @@ export async function GET(request) {
     for (const settings of allSettings) {
       const threshold = settings.institute.lowAttendanceThreshold || 75;
 
-      // Derive the institute ID from the settings document. instituteId is the
-      // canonical field; fall back to _id only when instituteId is absent.
-      // Reject any document whose instituteId cannot be determined as a
-      // non-empty string: processing it with an undefined or empty key would
-      // cause studentsByInstitute.get() to return undefined, silently matching
-      // no students or incorrectly matching students from another institute if
-      // two settings documents resolve to the same fallback key.
       const rawInstituteId = settings.instituteId;
       if (
         !rawInstituteId ||
@@ -249,18 +242,13 @@ export async function GET(request) {
       }
       const instituteId = rawInstituteId.trim();
 
-      // Fetch students for this institute only instead of loading all students globally
-      const instituteStudents = await db.collection('users').find({
-        role: 'student',
-        instituteId,
-      }).toArray();
-
+      const instituteStudents = studentsByInstitute.get(instituteId) || [];
       if (instituteStudents.length === 0) continue;
 
       // Process students in batches to keep memory usage bounded
       for (let i = 0; i < instituteStudents.length; i += STUDENT_BATCH_SIZE) {
         const batch = instituteStudents.slice(i, i + STUDENT_BATCH_SIZE);
-        const batchUids = batch.map(s => s.firebaseUid).filter(Boolean);
+        const batchUids = batch.map(s => s.uid || s.firebaseUid).filter(Boolean);
         if (batchUids.length === 0) continue;
 
         // Load attendance records for this batch only
@@ -275,54 +263,36 @@ export async function GET(request) {
           if (userRecords) {
             userRecords.push(record);
           }
-      // Load attendance from MongoDB scoped to this institute only.
-      const instituteStudentUids = instituteStudents
-        .map((s) => s.firebaseUid)
-        .filter(Boolean);
-      const mongoAttendance = await loadMongoAttendanceByUser(
-        db,
-        instituteId,
-        instituteStudentUids
-      );
-
-      // Build attendanceByUser from mongoAttendance
-      const attendanceByUser = new Map();
-      for (const [uid, records] of mongoAttendance || []) {
-        attendanceByUser.set(uid, records);
-      }
-
-      for (const student of instituteStudents) {
-        const studentUid = student.firebaseUid;
-        if (!studentUid) continue;
-
-        // Skip if warned recently (batch cooldown check)
-        if (recentWarningUserIds.has(studentUid)) {
-          continue;
         }
 
-        // Check cooldown for this batch only (scoped $in query)
+        // Check cooldown for this batch only
+        const cooldownSet = new Set();
         const recentLogs = await db.collection("warning_logs").find({
           userId: { $in: batchUids },
           createdAt: { $gte: cooldownDate },
         }).project({ userId: 1 }).toArray();
-        const cooldownSet = new Set(recentLogs.map(l => l.userId));
+        for (const log of recentLogs) {
+          cooldownSet.add(log.userId);
+        }
 
         for (const student of batch) {
-          const uid = student.firebaseUid;
-          if (!uid || cooldownSet.has(uid)) continue;
+          const uid = student.uid || student.firebaseUid;
+          if (!uid) continue;
+
+          if (cooldownSet.has(uid)) continue;
 
           const studentAttendance = attendanceByUser.get(uid) || [];
           const evaluation = evaluateStudentAttendance(studentAttendance, threshold);
 
           if (evaluation.isBelowThreshold) {
             const email = student.email;
-            const name = student.name || student.fullName || 'Student';
+            const name = student.name || student.fullName || "Student";
 
             notificationsToInsert.push({
               userId: uid,
-              title: 'Low Attendance Warning',
+              title: "Low Attendance Warning",
               message: `Your current attendance is ${evaluation.percentage}%, which is below the required ${threshold}%. Please improve your attendance.`,
-              type: 'warning',
+              type: "warning",
               read: false,
               createdAt: now,
             });
@@ -330,41 +300,6 @@ export async function GET(request) {
             warningLogsToInsert.push({
               userId: uid,
               percentage: evaluation.percentage,
-        const uid = student.uid || student.firebaseUid;
-        if (!uid) continue;
-
-        // Use MongoDB attendance data (scoped by institute) instead of Firestore
-        const studentAttendance = attendanceByUser.get(uid) || [];
-        const evaluation = evaluateStudentAttendance(
-          studentAttendance,
-          threshold
-        );
-
-        if (evaluation.isBelowThreshold) {
-          const email = student.email;
-          const name = student.name || student.fullName || "Student";
-
-          notificationsToInsert.push({
-            userId: uid,
-            title: "Low Attendance Warning",
-            message: `Your current attendance is ${evaluation.percentage}%, which is below the required ${threshold}%. Please improve your attendance.`,
-            type: "warning",
-            read: false,
-            createdAt: now,
-          });
-
-          warningLogsToInsert.push({
-            userId: uid,
-            percentage: evaluation.percentage,
-            threshold,
-            createdAt: now,
-          });
-
-          if (email) {
-            emailsToSend.push({
-              to_email: email,
-              to_name: name,
-              attendance_percentage: evaluation.percentage,
               threshold,
               createdAt: now,
             });
@@ -382,14 +317,17 @@ export async function GET(request) {
           }
         }
 
-        // Flush accumulated notifications to prevent unbounded memory growth
         if (notificationsToInsert.length >= FLUSH_THRESHOLD) {
           await flushNotifications();
         }
       }
     }
 
-    await flushNotifications();
+    if (notificationsToInsert.length > 0) {
+      await db.collection("notifications").insertMany(notificationsToInsert);
+      await db.collection("warning_logs").insertMany(warningLogsToInsert);
+    }
+
     await sendWarningEmails(emailsToSend);
 
     return NextResponse.json({
