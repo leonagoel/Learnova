@@ -16,10 +16,26 @@ export default function NotFound() {
   const pathname = usePathname();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          router.push("/");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [mounted, router]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex items-center justify-center transition-colors duration-500">
@@ -77,11 +93,16 @@ export default function NotFound() {
 
         {/* Current Path Indicator Tag — only rendered client-side to avoid SSR/hydration mismatch */}
         {mounted && pathname && (
-          <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400 backdrop-blur-md shadow-inner select-all">
-            <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Broken Path:</span>
-            <code className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-              {pathname}
-            </code>
+          <div className="flex flex-col items-center gap-4">
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400 backdrop-blur-md shadow-inner select-all">
+              <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Broken Path:</span>
+              <code className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                {pathname}
+              </code>
+            </div>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 select-none animate-pulse">
+              Redirecting to home in <span className="font-extrabold text-indigo-600 dark:text-indigo-400">{countdown}</span> seconds...
+            </p>
           </div>
         )}
 
