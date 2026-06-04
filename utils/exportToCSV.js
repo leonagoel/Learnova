@@ -1,6 +1,8 @@
 export const exportRiskToCSV = (data) => {
   if (!data || !data.length) return;
+  
   const headers = ['Student ID', 'Risk Level', 'Primary Triggers', 'Early Warning Notes', 'Generated At'];
+  
   const rows = data.map(item => [
     `"${item.studentId || ''}"`,
     `"${item.riskLevel || 'Low'}"`,
@@ -8,7 +10,14 @@ export const exportRiskToCSV = (data) => {
     `"${item.earlyWarningNotes?.replace(/"/g, '""') || ''}"`,
     `"${item.createdAt ? new Date(item.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}"`
   ]);
+  
   const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+  
+  // SAFE CHECK: Prevents Vitest/Node environment from crashing during automated tests
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return csvContent;
+  }
+  
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
