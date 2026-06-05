@@ -282,7 +282,8 @@ export const viewport = {
 };
 
 // ─── Root layout ──────────────────────────────────────────────────────────────
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const messages = await getMessages();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -321,6 +322,7 @@ export default function RootLayout({ children }) {
 
         {/* ── All context providers (Theme, Auth, Firestore, Notifications) ── */}
 
+        <NextIntlClientProvider messages={messages}>
         <AllProviders>
           {/* Note: Ensure these providers (ThemeProvider, AuthProvider, etc.) 
               are actually imported and exported correctly in AllProviders 
@@ -375,8 +377,9 @@ export default function RootLayout({ children }) {
             
             {/* 🚀 ADDED: System Shortcuts Modal integration layer */}
             <ShortcutsModal />
-          </NextIntlClientProvider>
+          </Suspense>
         </AllProviders>
+        </NextIntlClientProvider>
 
       </body>
     </html>
