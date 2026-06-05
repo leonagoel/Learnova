@@ -76,6 +76,7 @@ export default function ChatBot() {
       t("suggestedQuestions.analytics.q3"),
       t("suggestedQuestions.analytics.q4"),
     ],
+
   };
 
   useEffect(() => {
@@ -93,11 +94,7 @@ export default function ChatBot() {
     if (!textToSend) setInputValue("");
     setIsLoading(true);
 
-    setTimeout(() => {
-      const botMessage = { role: "bot", content: "Localized response received." };
-      setMessages((prev) => [...prev, botMessage]);
-      setIsLoading(false);
-    }, 1000);
+
   };
 
   if (!isOpen) {
