@@ -31,19 +31,72 @@ const redisKeys = {
   recentNotices: () => "sse:notices:recent",
 };
 
-// ── Connection Registry (Redis-backed) ───────────────────────────────────────
+// ── In-memory connection fallback (used when Redis is unavailable) ────────────
+// Entries carry a TTL so abnormally terminated connections (serverless timeout,
+// browser crash, process kill) self-heal instead of permanently blocking slots.
+const MEMORY_CONNECTION_TTL_MS = 5 * 60 * 1000;
+const memoryConnections = new Map();
+
+function getMemoryConnectionCount(userId) {
+  const entry = memoryConnections.get(userId);
+  if (!entry) return 0;
+  if (Date.now() > entry.expiresAt) {
+    memoryConnections.delete(userId);
+    return 0;
+  }
+  return entry.count;
+}
+
+function incrementMemoryConnection(userId) {
+  const count = getMemoryConnectionCount(userId) + 1;
+  memoryConnections.set(userId, {
+    count,
+    expiresAt: Date.now() + MEMORY_CONNECTION_TTL_MS,
+  });
+  return count;
+}
+
+function decrementMemoryConnection(userId) {
+  const count = Math.max(0, getMemoryConnectionCount(userId) - 1);
+  if (count === 0) {
+    memoryConnections.delete(userId);
+  } else {
+    memoryConnections.set(userId, {
+      count,
+      expiresAt: Date.now() + MEMORY_CONNECTION_TTL_MS,
+    });
+  }
+  return count;
+}
+
+// Periodic eviction of stale entries — same pattern as lib/rateLimit.js
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of memoryConnections.entries()) {
+    if (now > entry.expiresAt) {
+      memoryConnections.delete(userId);
+    }
+  }
+}, 60 * 1000).unref();
+
+// ── Connection Registry (Redis-backed with in-memory fallback) ────────────────
 async function registerConnection(userId) {
   const redis = getRedis();
   if (!redis) {
-    // Fallback: allow connection without limit enforcement (dev without Redis)
-    return { connId: Date.now().toString(36) + Math.random().toString(36).slice(2), allowed: true };
+    // Fallback: use in-memory connection tracking with the same limit
+    const count = incrementMemoryConnection(userId);
+    if (count > MAX_PER_USER) {
+      decrementMemoryConnection(userId);
+      return { connId: null, allowed: false };
+    }
+    const connId =
+      Date.now().toString(36) + Math.random().toString(36).slice(2);
+    return { connId, allowed: true };
   }
 
   const key = redisKeys.connectionCount(userId);
   const count = await redis.incr(key);
-  if (count === 1) {
-    await redis.expire(key, Math.ceil(IDLE_TIMEOUT_MS / 1000));
-  }
+  await redis.expire(key, Math.ceil(IDLE_TIMEOUT_MS / 1000));
 
   if (count > MAX_PER_USER) {
     await redis.decr(key);
@@ -56,7 +109,10 @@ async function registerConnection(userId) {
 
 async function unregisterConnection(userId) {
   const redis = getRedis();
-  if (!redis) return;
+  if (!redis) {
+    decrementMemoryConnection(userId);
+    return;
+  }
   const key = redisKeys.connectionCount(userId);
   const newCount = await redis.decr(key);
   if (newCount < 0) {
@@ -86,15 +142,33 @@ export async function GET(request) {
     const profile = await getUserProfile(decodedToken.uid);
     const userRole = profile?.role || "student";
     const userId = decodedToken.uid;
-    const instituteId = profile?.instituteId || null;
+    const instituteId =
+      profile?.instituteId || profile?.uid || decodedToken.uid;
+
+    if (!instituteId) {
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized: Missing institute configuration.",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-    const rateLimitResult = await checkRateLimit(`notices_stream_${ip}_${userId}`);
+    const rateLimitResult = await checkRateLimit(
+      `notices_stream_${ip}_${userId}`
+    );
     if (!rateLimitResult.allowed) {
-      return new Response(JSON.stringify({ error: "Too many connections. Please slow down." }), {
-        status: 429,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Too many connections. Please slow down." }),
+        {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
     let isConnected = true;
@@ -129,15 +203,16 @@ export async function GET(request) {
             await unregisterConnection(userId);
             connId = null;
           }
-          try { controller.close(); } catch {}
+          try {
+            controller.close();
+          } catch {}
         };
 
         const { connId: newConnId, allowed } = await registerConnection(userId);
         connId = newConnId;
         if (!allowed) {
           sendEvent("error", {
-            message:
-              "Too many connections. Close other tabs and try again.",
+            message: "Too many connections. Close other tabs and try again.",
           });
           await cleanup();
           return;
@@ -147,6 +222,7 @@ export async function GET(request) {
 
         // Fetch initial notices from MongoDB
         let lastNoticeTime = new Date();
+        let lastNoticeId = null;
         try {
           const db = await connectDbForSSE();
           const noticesCollection = db.collection("notices");
@@ -164,7 +240,12 @@ export async function GET(request) {
           }));
           sendEvent("initial", formattedNotices);
           if (initialNotices.length > 0) {
-            lastNoticeTime = initialNotices[0].createdAt || new Date();
+            const newest = initialNotices.reduce((latest, n) => {
+              const t = n.createdAt;
+              return t && t > latest.createdAt ? n : latest;
+            }, initialNotices[0]);
+            lastNoticeTime = newest.createdAt || new Date();
+            lastNoticeId = newest._id?.toString() || newest.id || null;
           }
         } catch (err) {
           console.error("Initial fetch error:", err);
@@ -173,37 +254,82 @@ export async function GET(request) {
           return;
         }
 
-        // Poll for new notices from Redis sorted set
+        // Poll for new notices from Redis (fallback to MongoDB when Redis is unavailable)
         const pollForNotices = async () => {
           if (!isConnected) return;
           try {
             const redis = getRedis();
-            if (!redis) return;
-            const key = redisKeys.recentNotices();
-            const lastScore = lastNoticeTime.getTime();
-            const members = await redis.zrange(key, lastScore, "+inf", {
-              byScore: true,
-              rev: false,
-            });
-            for (const member of members) {
-              if (!isConnected) break;
-              try {
-                const doc = typeof member === "string" ? JSON.parse(member) : member;
-                if (
-                  doc.targetAudience &&
-                  doc.targetAudience.includes(userRole) &&
-                  String(doc.instituteId) === String(instituteId)
-                ) {
-                  sendEvent("new-notice", {
-                    ...doc,
-                    id: doc._id || doc.id,
-                  });
-                }
-                const memberTime = new Date(doc.createdAt).getTime();
-                if (memberTime > lastNoticeTime.getTime()) {
+            if (redis) {
+              const key = redisKeys.recentNotices();
+              const lastScore = lastNoticeTime.getTime();
+              const members = await redis.zrange(key, lastScore, "+inf", {
+                byScore: true,
+                rev: false,
+              });
+              for (const member of members) {
+                if (!isConnected) break;
+                try {
+                  const doc =
+                    typeof member === "string" ? JSON.parse(member) : member;
+                  const docId = doc._id || doc.id;
+                  const memberTime = new Date(doc.createdAt).getTime();
+                  // Skip the notice that was the last processed watermark (deterministic tie-breaker)
+                  if (
+                    memberTime === lastNoticeTime.getTime() &&
+                    docId === lastNoticeId
+                  ) {
+                    continue;
+                  }
+                  const docAudience = Array.isArray(doc.targetAudience)
+                    ? doc.targetAudience
+                    : typeof doc.targetAudience === "string"
+                      ? [doc.targetAudience]
+                      : [];
+                  if (
+                    docAudience.includes(userRole) &&
+                    doc.instituteId &&
+                    String(doc.instituteId) === String(instituteId)
+                  ) {
+                    sendEvent("new-notice", {
+                      ...doc,
+                      id: docId,
+                    });
+                  }
+                  if (memberTime > lastNoticeTime.getTime()) {
+                    lastNoticeTime = new Date(doc.createdAt);
+                    lastNoticeId = docId;
+                  } else if (
+                    memberTime === lastNoticeTime.getTime() &&
+                    docId !== lastNoticeId
+                  ) {
+                    lastNoticeId = docId;
+                  }
+                } catch {}
+              }
+            } else {
+              // Fallback: poll MongoDB directly
+              const db = await connectDbForSSE();
+              const noticesCollection = db.collection("notices");
+              const newNotices = await noticesCollection
+                .find({
+                  targetAudience: userRole,
+                  instituteId: instituteId,
+                  createdAt: { $gt: lastNoticeTime },
+                })
+                .sort({ createdAt: -1 })
+                .limit(20)
+                .toArray();
+              for (const doc of newNotices) {
+                if (!isConnected) break;
+                sendEvent("new-notice", {
+                  ...doc,
+                  id: doc._id.toString(),
+                });
+                const docTime = new Date(doc.createdAt).getTime();
+                if (docTime > lastNoticeTime.getTime()) {
                   lastNoticeTime = new Date(doc.createdAt);
                 }
-              } catch {}
+              }
             }
           } catch {}
         };
@@ -220,7 +346,6 @@ export async function GET(request) {
           sendEvent("ping", { time: new Date().toISOString() });
           resetIdle();
         }, HEARTBEAT_INTERVAL_MS);
-
       },
     });
 
@@ -228,7 +353,7 @@ export async function GET(request) {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       },
     });

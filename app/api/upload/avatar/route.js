@@ -6,26 +6,20 @@ import { requireAuth } from "@/lib/rbac";
 import { checkRateLimit } from "@/lib/rateLimit";
 import {
   extractImageFileFromFormData,
-  uploadAvatarToBlob,
   updateUserImageInDb,
 } from "@/lib/images/imagesService";
+import {
+  processAndUploadFile,
+  activeStorage,
+} from "@/lib/services/uploadService";
 
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-export const POST = async (request) => {
-  try {
-    const decodedToken = await requireAuth(request);
-
-    const rateLimitResult = await checkRateLimit(
-      `avatar_upload_${decodedToken.uid}`
-    );
 export const POST = withErrorHandler(async (request) => {
   const decodedToken = await requireAuth(request);
-
-  const ip =
-    request.headers.get("x-forwarded-for") || "127.0.0.1";
+  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
 
   const rateLimitResult = await checkRateLimit(
     `avatar_upload_${ip}_${decodedToken.uid}`
@@ -46,23 +40,21 @@ export const POST = withErrorHandler(async (request) => {
     throw new ValidationError("File size exceeds 5MB limit");
   }
 
-  // Upload to Vercel Blob instead of storing base64 in MongoDB
-  const { blobUrl } = await uploadAvatarToBlob({
+  const { url } = await processAndUploadFile(
     file,
-    uid: decodedToken.uid,
-  });
+    `avatars/${decodedToken.uid}`
+  );
 
   try {
     await updateUserImageInDb({
       firebaseUid: decodedToken.uid,
-      imageUrl: blobUrl,
+      imageUrl: url,
       faceDescriptor: null,
     });
   } catch (error) {
-    // Roll back blob upload on DB failure
-    await del(blobUrl).catch(() => {});
+    await activeStorage.delete(url).catch(() => {});
     throw error;
   }
 
-  return jsonSuccess({ url: blobUrl }, 200);
+  return jsonSuccess({ url }, 200);
 });

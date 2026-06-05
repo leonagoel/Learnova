@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
@@ -59,6 +59,8 @@ export const useAttendance = ({ role, user }) => {
   const [classes, setClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [attendanceRequests, setAttendanceRequests] = useState([]);
+  const [hasMoreRequests, setHasMoreRequests] = useState(true);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   // --- student fetchers ---
   const fetchStudentActivity = useCallback(async () => {
@@ -122,9 +124,7 @@ export const useAttendance = ({ role, user }) => {
       );
       const averageAttendance =
         totalStudents > 0
-          ? Math.round(
-              ((presentToday + lateToday) / totalStudents) * 1000
-            ) / 10
+          ? Math.round(((presentToday + lateToday) / totalStudents) * 1000) / 10
           : 0;
 
       setAttendanceStats({
@@ -160,19 +160,54 @@ export const useAttendance = ({ role, user }) => {
       if (data.dashboardData) setDashboardData(data.dashboardData);
       if (data.classes) setClasses(data.classes);
       if (data.teachers) setTeachers(data.teachers);
-      if (data.attendanceRequests)
+      if (data.attendanceRequests) {
         setAttendanceRequests(data.attendanceRequests);
+        setHasMoreRequests(data.attendanceRequests.length >= 20);
+      }
     } catch (err) {
       if (mounted) {
-        setError(
-          "Network error. Please check your connection and try again."
-        );
+        setError("Network error. Please check your connection and try again.");
       }
       console.error(err);
     } finally {
       if (mounted) setLoading(false);
     }
   }, [user]);
+
+  const loadMoreRequests = useCallback(async () => {
+    if (!user || loadingRequests || !hasMoreRequests) return;
+
+    setLoadingRequests(true);
+    try {
+      const token = await user.getIdToken();
+      const lastRequest = attendanceRequests[attendanceRequests.length - 1];
+      const cursor = lastRequest?.id || "";
+
+      const res = await apiFetch(
+        `/api/institute/attendance-requests?cursor=${cursor}&limit=20`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const data = unwrapApiPayload(res);
+      if (data && data.requests) {
+        setAttendanceRequests((prev) => {
+          // Avoid duplicates if rapid calls happen
+          const existingIds = new Set(prev.map((r) => r.id));
+          const newRequests = data.requests.filter(
+            (r) => !existingIds.has(r.id)
+          );
+          return [...prev, ...newRequests];
+        });
+        setHasMoreRequests(data.requests.length >= 20);
+      }
+    } catch (err) {
+      console.error("Failed to load more requests", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [user, attendanceRequests, loadingRequests, hasMoreRequests]);
 
   // --- effects ---
   useEffect(() => {
@@ -189,13 +224,15 @@ export const useAttendance = ({ role, user }) => {
   // teacher real-time roster via onSnapshot
   useEffect(() => {
     if (role !== "teacher" || !user) return;
-    let unsubscribe = () => {};
+    let cancelled = false;
+    const unsubRef = { current: () => {} };
 
     const fetchStudentsAndAttendance = async () => {
       try {
         const usersRef = collection(db, "users");
         const qStudents = query(usersRef, where("role", "==", "student"));
         const studentDocs = await getDocs(qStudents);
+        if (cancelled) return;
 
         const studentsList = studentDocs.docs.map((doc) => ({
           id: doc.id,
@@ -213,8 +250,10 @@ export const useAttendance = ({ role, user }) => {
           collection(db, "attendance_records"),
           where("date", "==", today)
         );
+        if (cancelled) return;
 
-        unsubscribe = onSnapshot(attendanceQuery, (snapshot) => {
+        unsubRef.current = onSnapshot(attendanceQuery, (snapshot) => {
+          if (cancelled) return;
           const attendanceMap = new Map();
           snapshot.docs.forEach((doc) => {
             const data = doc.data();
@@ -224,8 +263,7 @@ export const useAttendance = ({ role, user }) => {
 
           const mergedRoster = studentsList.map((student, index) => {
             const record =
-              attendanceMap.get(student.id) ||
-              attendanceMap.get(student.email);
+              attendanceMap.get(student.id) || attendanceMap.get(student.email);
             return {
               id: student.id || index,
               name: student.name,
@@ -256,11 +294,46 @@ export const useAttendance = ({ role, user }) => {
             setStudentAttendanceData(mergedRoster);
           } else {
             setStudentAttendanceData([
-              { id: 1, name: "Alex Johnson", rollNo: "CS21B1001", status: "present", time: "09:02", confidence: 98 },
-              { id: 2, name: "Emma Davis", rollNo: "CS21B1002", status: "present", time: "09:01", confidence: 95 },
-              { id: 3, name: "Michael Chen", rollNo: "CS21B1003", status: "late", time: "09:08", confidence: 92 },
-              { id: 4, name: "Sarah Wilson", rollNo: "CS21B1004", status: "absent", time: "--", confidence: 0 },
-              { id: 5, name: "David Kumar", rollNo: "CS21B1005", status: "present", time: "09:03", confidence: 97 },
+              {
+                id: 1,
+                name: "Alex Johnson",
+                rollNo: "CS21B1001",
+                status: "present",
+                time: "09:02",
+                confidence: 98,
+              },
+              {
+                id: 2,
+                name: "Emma Davis",
+                rollNo: "CS21B1002",
+                status: "present",
+                time: "09:01",
+                confidence: 95,
+              },
+              {
+                id: 3,
+                name: "Michael Chen",
+                rollNo: "CS21B1003",
+                status: "late",
+                time: "09:08",
+                confidence: 92,
+              },
+              {
+                id: 4,
+                name: "Sarah Wilson",
+                rollNo: "CS21B1004",
+                status: "absent",
+                time: "--",
+                confidence: 0,
+              },
+              {
+                id: 5,
+                name: "David Kumar",
+                rollNo: "CS21B1005",
+                status: "present",
+                time: "09:03",
+                confidence: 97,
+              },
             ]);
           }
         });
@@ -270,7 +343,10 @@ export const useAttendance = ({ role, user }) => {
     };
 
     fetchStudentsAndAttendance();
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubRef.current();
+    };
   }, [role, user]);
 
   useEffect(() => {
@@ -312,6 +388,9 @@ export const useAttendance = ({ role, user }) => {
     teachers,
     attendanceRequests,
     setAttendanceRequests,
+    loadMoreRequests,
+    hasMoreRequests,
+    loadingRequests,
     // shared
     loading,
     error,

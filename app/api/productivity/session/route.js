@@ -7,6 +7,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { z } from "zod";
 
 const DEFAULT_DAYS_BACK = 7;
+const MAX_DAYS_BACK = 90;
 const MAX_SESSION_PAYLOAD_BYTES = 1024 * 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -16,9 +17,6 @@ const sessionSchema = z.object({
     .int("duration must be an integer")
     .min(1, "duration must be at least 1 minute")
     .max(480, "duration cannot exceed 8 hours"),
-  completedAt: z
-    .string({ message: "completedAt is required" })
-    .datetime({ message: "completedAt must be a valid ISO date string" }),
   type: z.enum(["focus", "break"], {
     message: "type must be either 'focus' or 'break'",
   }),
@@ -52,6 +50,11 @@ export function parseSessionDateRange(searchParams, now = new Date()) {
     Math.ceil((endDate.getTime() - startDate.getTime()) / DAY_MS)
   );
 
+  // Cap the window to prevent unbounded scans
+  if (daySpan > MAX_DAYS_BACK) {
+    throw new ValidationError(`Date range cannot exceed ${MAX_DAYS_BACK} days`);
+  }
+
   return {
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
@@ -67,9 +70,15 @@ export function parseSessionDateRange(searchParams, now = new Date()) {
  * if available — failures are silently caught to avoid blocking session recording.
  */
 export const POST = withErrorHandler(async (request) => {
-  const { payload: decodedToken } = await requireRole(request, ["student", "teacher", "admin"]);
+  const { payload: decodedToken } = await requireRole(request, [
+    "student",
+    "teacher",
+    "admin",
+  ]);
   const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  const rateLimitResult = await checkRateLimit(`productivity_session_post_${ip}_${decodedToken.uid}`);
+  const rateLimitResult = await checkRateLimit(
+    `productivity_session_post_${ip}_${decodedToken.uid}`
+  );
   if (!rateLimitResult.allowed) {
     throw new AppError("Too many attempts. Please try again later.", 429);
   }
@@ -83,7 +92,7 @@ export const POST = withErrorHandler(async (request) => {
     throw new ValidationError(firstError);
   }
 
-  const { duration, completedAt, type } = validation.data;
+  const { duration, type } = validation.data;
   const now = new Date().toISOString();
 
   const db = await connectDb();
@@ -92,7 +101,7 @@ export const POST = withErrorHandler(async (request) => {
   const sessionDoc = {
     firebaseUid: userId,
     duration,
-    completedAt,
+    completedAt: now,
     type,
     createdAt: now,
   };
@@ -112,7 +121,7 @@ export const POST = withErrorHandler(async (request) => {
 
   return NextResponse.json({
     success: true,
-    session: { duration, completedAt, type },
+    session: { duration, completedAt: now, type },
     xpAwarded,
   });
 });
@@ -125,9 +134,15 @@ export const POST = withErrorHandler(async (request) => {
  * totalSessions, totalFocusMinutes, averagePerDay.
  */
 export const GET = withErrorHandler(async (request) => {
-  const { payload: decodedToken } = await requireRole(request, ["student", "teacher", "admin"]);
+  const { payload: decodedToken } = await requireRole(request, [
+    "student",
+    "teacher",
+    "admin",
+  ]);
   const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  const rateLimitResult = await checkRateLimit(`productivity_session_get_${ip}_${decodedToken.uid}`);
+  const rateLimitResult = await checkRateLimit(
+    `productivity_session_get_${ip}_${decodedToken.uid}`
+  );
   if (!rateLimitResult.allowed) {
     throw new AppError("Too many attempts. Please try again later.", 429);
   }
@@ -148,7 +163,10 @@ export const GET = withErrorHandler(async (request) => {
     .toArray();
 
   const focusSessions = sessions.filter((s) => s.type === "focus");
-  const totalFocusMinutes = focusSessions.reduce((sum, s) => sum + s.duration, 0);
+  const totalFocusMinutes = focusSessions.reduce(
+    (sum, s) => sum + s.duration,
+    0
+  );
 
   return NextResponse.json({
     sessions: sessions.map(({ _id, ...rest }) => rest),

@@ -16,7 +16,9 @@ const activitySchema = z.object({
     .trim(),
   type: z
     .enum(ALLOWED_TYPES, {
-      errorMap: () => ({ message: `type must be one of: ${ALLOWED_TYPES.join(", ")}` }),
+      errorMap: () => ({
+        message: `type must be one of: ${ALLOWED_TYPES.join(", ")}`,
+      }),
     })
     .default("course"),
   progress: z
@@ -36,12 +38,15 @@ export const GET = withErrorHandler(async (request) => {
     .collection("activities")
     .where("userId", "==", decodedToken.uid)
     .orderBy("timestamp", "desc")
+    .limit(100)
     .get();
 
   const activities = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
-    timestamp: doc.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString(),
+    timestamp:
+      doc.data().timestamp?.toDate?.()?.toISOString() ||
+      new Date().toISOString(),
   }));
 
   return jsonSuccess({ activities }, 200);

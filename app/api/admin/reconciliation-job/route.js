@@ -4,7 +4,10 @@ import { requireAdmin } from "@/lib/rbac";
 import { initializeFirebase, getAdminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { connectDb } from "@/lib/mongodb";
-import { findStaleOperations, cleanupOldOperations } from "@/lib/transactionCoordinator";
+import {
+  findStaleOperations,
+  cleanupOldOperations,
+} from "@/lib/transactionCoordinator";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -41,19 +44,28 @@ export const POST = withErrorHandler(async (request) => {
     results.staleOperationsReviewed = staleOps.length;
 
     for (const op of staleOps) {
-      logger.info(`[reconciliation-job] Processing stale operation: ${op.operationId}`, {
-        operationType: op.operationType,
-        uid: op.uid,
-        status: op.status,
-      });
+      logger.info(
+        `[reconciliation-job] Processing stale operation: ${op.operationId}`,
+        {
+          operationType: op.operationType,
+          uid: op.uid,
+          status: op.status,
+        }
+      );
 
       // If operation failed and was fully compensated, mark as resolved
       if (op.status === "compensating" && op.fullyCompensated) {
-        const mongoDB = await connectDb();
-        await mongoDB.collection("pending_operations").updateOne(
-          { operationId: op.operationId },
-          { $set: { status: "resolved_by_reconciliation", updatedAt: new Date() } }
-        );
+        await mongoDB
+          .collection("pending_operations")
+          .updateOne(
+            { operationId: op.operationId },
+            {
+              $set: {
+                status: "resolved_by_reconciliation",
+                updatedAt: new Date(),
+              },
+            }
+          );
       }
     }
   } catch (err) {
@@ -75,28 +87,35 @@ export const POST = withErrorHandler(async (request) => {
       const firestoreSnapshot = await firestoreQuery.get();
       if (firestoreSnapshot.empty) break;
       firestoreSnapshot.docs.forEach((doc) => firestoreUids.add(doc.id));
-      firestoreCursor = firestoreSnapshot.docs[firestoreSnapshot.docs.length - 1];
+      firestoreCursor =
+        firestoreSnapshot.docs[firestoreSnapshot.docs.length - 1];
     } while (firestoreCursor);
 
     // Page through MongoDB users
     const mongoUids = new Set();
     const mongoUsersMap = new Map();
     let mongoCursor = null;
+    let lastBatchSize = 0;
     do {
-      let mongoQuery = mongoDB.collection("users").find({}).limit(PAGE_SIZE);
+      let mongoQuery = mongoDB
+        .collection("users")
+        .find({})
+        .sort({ _id: 1 })
+        .limit(PAGE_SIZE);
       if (mongoCursor) {
         mongoQuery = mongoQuery.skip(mongoCursor);
       }
       const mongoBatch = await mongoQuery.toArray();
-      if (mongoBatch.length === 0) break;
+      lastBatchSize = mongoBatch.length;
+      if (lastBatchSize === 0) break;
       mongoBatch.forEach((u) => {
         if (u.firebaseUid) {
           mongoUids.add(u.firebaseUid);
           mongoUsersMap.set(u.firebaseUid, u);
         }
       });
-      mongoCursor = (mongoCursor || 0) + mongoBatch.length;
-    } while (mongoCursor && mongoUids.size === mongoCursor);
+      mongoCursor = (mongoCursor || 0) + lastBatchSize;
+    } while (lastBatchSize === PAGE_SIZE);
 
     // Bulk-reconcile: Firestore → MongoDB
     const mongoBulkOps = [];
@@ -135,8 +154,11 @@ export const POST = withErrorHandler(async (request) => {
       }
     }
     if (mongoBulkOps.length > 0) {
-      const bulkResult = await mongoDB.collection("users").bulkWrite(mongoBulkOps, { ordered: false });
-      results.mongoToFirestoreReconciled = bulkResult.upsertedCount + bulkResult.modifiedCount;
+      const bulkResult = await mongoDB
+        .collection("users")
+        .bulkWrite(mongoBulkOps, { ordered: false });
+      results.mongoToFirestoreReconciled =
+        bulkResult.upsertedCount + bulkResult.modifiedCount;
     }
 
     // Bulk-reconcile: MongoDB → Firestore
@@ -156,7 +178,9 @@ export const POST = withErrorHandler(async (request) => {
           createdAt: mongoUser.createdAt || new Date().toISOString(),
           lastLogin: mongoUser.lastLogin || null,
         };
-        firestoreBatch.set(db.collection("users").doc(uid), profile, { merge: true });
+        firestoreBatch.set(db.collection("users").doc(uid), profile, {
+          merge: true,
+        });
         firestoreBatchSize++;
         firestoreBatchOps++;
 

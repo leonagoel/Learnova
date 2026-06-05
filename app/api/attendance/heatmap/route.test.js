@@ -1,7 +1,8 @@
 import { GET } from "./route";
-import { requireAuth } from "@/lib/rbac";
+import { requireRole } from "@/lib/rbac";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { getFirestore } from "firebase-admin/firestore";
+import { getUserProfile } from "@/lib/firebase-admin";
 
 vi.mock("@/lib/error-handler", () => ({
   withErrorHandler: (handler) => handler,
@@ -19,7 +20,7 @@ vi.mock("@/lib/api-response", () => ({
 }));
 
 vi.mock("@/lib/rbac", () => ({
-  requireAuth: vi.fn(),
+  requireRole: vi.fn(),
 }));
 
 vi.mock("@/lib/rateLimit", () => ({
@@ -28,6 +29,7 @@ vi.mock("@/lib/rateLimit", () => ({
 
 vi.mock("@/lib/firebase-admin", () => ({
   initFirebaseAdmin: vi.fn(),
+  getUserProfile: vi.fn(),
 }));
 
 vi.mock("firebase-admin/firestore", () => ({
@@ -61,55 +63,134 @@ describe("attendance heatmap API route", () => {
   });
 
   test("derives userId from token when no explicit userId provided", async () => {
-    requireAuth.mockResolvedValue({ uid: "student-1", role: "student" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "student-1", role: "student" },
+      profile: { role: "student" },
+    });
     const { mockGet } = createMockFirestore();
     mockGet.mockResolvedValue(createMockDocs([]));
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?month=2026-06");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?month=2026-06"
+    );
     const res = await GET(req);
 
     expect(res.status).toBe(200);
   });
 
   test("rejects student querying another user", async () => {
-    requireAuth.mockResolvedValue({ uid: "student-1", role: "student" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "student-1", role: "student" },
+      profile: { role: "student" },
+    });
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?userId=other-user&month=2026-06");
-    await expect(GET(req)).rejects.toThrow("Forbidden: Cannot query attendance for another user");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?userId=other-user&month=2026-06"
+    );
+    await expect(GET(req)).rejects.toThrow(
+      "Forbidden: Cannot query attendance for another user"
+    );
   });
 
   test("allows admin to query any user", async () => {
-    requireAuth.mockResolvedValue({ uid: "admin-1", role: "admin" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "admin-1", role: "admin" },
+      profile: { role: "admin" },
+    });
+    getUserProfile.mockImplementation((uid) => {
+      if (uid === "admin-1") return Promise.resolve({ instituteId: "inst-1" });
+      if (uid === "student-42")
+        return Promise.resolve({ instituteId: "inst-1" });
+      return Promise.resolve(null);
+    });
     const { mockGet } = createMockFirestore();
     mockGet.mockResolvedValue(createMockDocs([]));
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?userId=student-42&month=2026-06");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?userId=student-42&month=2026-06"
+    );
     const res = await GET(req);
     expect(res.status).toBe(200);
   });
 
   test("allows teacher to query any user", async () => {
-    requireAuth.mockResolvedValue({ uid: "teacher-1", role: "teacher" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "teacher-1", role: "teacher" },
+      profile: { role: "teacher", subjects: ["Math"] },
+    });
+    getUserProfile.mockImplementation((uid) => {
+      if (uid === "teacher-1")
+        return Promise.resolve({ instituteId: "inst-1" });
+      if (uid === "student-42")
+        return Promise.resolve({
+          instituteId: "inst-1",
+          role: "student",
+          subjects: ["Math"],
+        });
+      return Promise.resolve(null);
+    });
     const { mockGet } = createMockFirestore();
     mockGet.mockResolvedValue(createMockDocs([]));
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?userId=student-42&month=2026-06");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?userId=student-42&month=2026-06"
+    );
     const res = await GET(req);
     expect(res.status).toBe(200);
+  });
+
+  test("rejects teacher querying student they do not teach", async () => {
+    requireRole.mockResolvedValue({
+      payload: { uid: "teacher-1", role: "teacher" },
+      profile: { role: "teacher", subjects: ["Math"] },
+    });
+    getUserProfile.mockResolvedValue({
+      role: "student",
+      subjects: ["History"],
+    });
+
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?userId=student-42&month=2026-06"
+    );
+    await expect(GET(req)).rejects.toThrow(
+      "Forbidden: You are not authorized to view this student's attendance heatmap"
+    );
   });
 
   test("allows student to query own data with explicit userId", async () => {
-    requireAuth.mockResolvedValue({ uid: "student-1", role: "student" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "student-1", role: "student" },
+      profile: { role: "student" },
+    });
     const { mockGet } = createMockFirestore();
     mockGet.mockResolvedValue(createMockDocs([]));
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?userId=student-1&month=2026-06");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?userId=student-1&month=2026-06"
+    );
     const res = await GET(req);
     expect(res.status).toBe(200);
   });
 
+  test("rejects invalid month format with 400 Validation Error", async () => {
+    requireRole.mockResolvedValue({
+      payload: { uid: "student-1", role: "student" },
+      profile: { role: "student" },
+    });
+
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?month=invalid"
+    );
+    await expect(GET(req)).rejects.toThrow(
+      "Invalid month format. Expected YYYY-MM."
+    );
+  });
+
   test("returns empty array when month is missing", async () => {
-    requireAuth.mockResolvedValue({ uid: "student-1", role: "student" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "student-1", role: "student" },
+      profile: { role: "student" },
+    });
 
     const req = mockRequest("http://localhost/api/attendance/heatmap");
     const res = await GET(req);
@@ -119,7 +200,10 @@ describe("attendance heatmap API route", () => {
   });
 
   test("correctly fetches attendance records from Firestore with date range filter", async () => {
-    requireAuth.mockResolvedValue({ uid: "user-123", role: "student" });
+    requireRole.mockResolvedValue({
+      payload: { uid: "user-123", role: "student" },
+      profile: { role: "student" },
+    });
 
     const mockDocs = [
       {
@@ -147,7 +231,9 @@ describe("attendance heatmap API route", () => {
     const { mockGet } = createMockFirestore();
     mockGet.mockResolvedValue(createMockDocs(mockDocs));
 
-    const req = mockRequest("http://localhost/api/attendance/heatmap?month=2026-05");
+    const req = mockRequest(
+      "http://localhost/api/attendance/heatmap?month=2026-05"
+    );
     const res = await GET(req);
     expect(res.status).toBe(200);
     const body = await res.json();
