@@ -19,7 +19,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebaseConfig";
 import { doc, updateDoc } from "firebase/firestore";
-
+import { safeLocalStorageSet, safeLocalStorageGet } from "@/lib/storage";
 export default function StreaksPage() {
   const [streak, setStreak] = useState(0);
   const [lastVisit, setLastVisit] = useState("");
@@ -42,14 +42,9 @@ export default function StreaksPage() {
         storedLastVisit = userProfile.siteLastVisit || "";
         storedHistory = userProfile.siteVisitHistory || [];
       } else {
-        storedStreak = parseInt(localStorage.getItem("learnova_site_streak") || "0", 10);
-        storedLastVisit = localStorage.getItem("learnova_site_last_visit") || "";
-        try {
-          const historyStr = localStorage.getItem("learnova_site_visit_history");
-          storedHistory = historyStr ? JSON.parse(historyStr) : [];
-        } catch (e) {
-          storedHistory = [];
-        }
+        storedStreak = parseInt(safeLocalStorageGet("learnova_site_streak", "0"), 10);
+        storedLastVisit = safeLocalStorageGet("learnova_site_last_visit", "");
+        storedHistory = safeLocalStorageGet("learnova_site_visit_history", []);
       }
 
       setStreak(storedStreak);
@@ -130,9 +125,9 @@ export default function StreaksPage() {
         newHistory.push(todayDateStr);
       }
 
-      localStorage.setItem("learnova_site_streak", newStreak.toString());
-      localStorage.setItem("learnova_site_last_visit", todayDateStr);
-      localStorage.setItem("learnova_site_visit_history", JSON.stringify(newHistory));
+      safeLocalStorageSet("learnova_site_streak", newStreak.toString());
+      safeLocalStorageSet("learnova_site_last_visit", todayDateStr);
+      safeLocalStorageSet("learnova_site_visit_history", newHistory);
 
       setStreak(newStreak);
       setLastVisit(todayDateStr);
@@ -172,9 +167,9 @@ export default function StreaksPage() {
 
       const todayDateStr = historyList[0]; // today
 
-      localStorage.setItem("learnova_site_streak", "7");
-      localStorage.setItem("learnova_site_last_visit", todayDateStr);
-      localStorage.setItem("learnova_site_visit_history", JSON.stringify(historyList));
+      safeLocalStorageSet("learnova_site_streak", "7");
+      safeLocalStorageSet("learnova_site_last_visit", todayDateStr);
+      safeLocalStorageSet("learnova_site_visit_history", historyList);
 
       setStreak(7);
       setLastVisit(todayDateStr);
@@ -204,9 +199,9 @@ export default function StreaksPage() {
       const localToday = new Date(today.getTime() - (offset * 60 * 1000));
       const todayDateStr = localToday.toISOString().split("T")[0];
 
-      localStorage.setItem("learnova_site_streak", "1");
-      localStorage.setItem("learnova_site_last_visit", todayDateStr);
-      localStorage.setItem("learnova_site_visit_history", JSON.stringify([todayDateStr]));
+      safeLocalStorageSet("learnova_site_streak", "1");
+      safeLocalStorageSet("learnova_site_last_visit", todayDateStr);
+      safeLocalStorageSet("learnova_site_visit_history", [todayDateStr]);
 
       setStreak(1);
       setLastVisit(todayDateStr);

@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/contexts/FirestoreContext";
 import { db } from "@/lib/firebaseConfig";
 import { doc, updateDoc } from "firebase/firestore";
+import { safeLocalStorageSet, safeLocalStorageGet } from "@/lib/storage";
 import { Navbar } from "./Navbar";
 import NoticeSearch from "./NoticeSearch";
 import NoticeFilters from "./NoticeFilters";
@@ -123,14 +124,9 @@ const SmartNoticeBoard = () => {
     if (userProfile && Array.isArray(userProfile.readNotices)) {
       setReadNotices(new Set(userProfile.readNotices));
     } else {
-      try {
-        const saved = localStorage.getItem(`readNotices_${userId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) setReadNotices(new Set(parsed));
-        }
-      } catch (err) {
-        console.error("Failed to load read notices locally:", err);
+      const saved = safeLocalStorageGet(`readNotices_${userId}`);
+      if (saved && Array.isArray(saved)) {
+        setReadNotices(new Set(saved));
       }
     }
   }, [userId, userProfile]);
@@ -140,14 +136,7 @@ const SmartNoticeBoard = () => {
     async (state) => {
       const stateArray = [...state];
       // Save locally as a fallback/cache
-      try {
-        localStorage.setItem(
-          `readNotices_${userId}`,
-          JSON.stringify(stateArray)
-        );
-      } catch (err) {
-        console.error("Failed to save read state locally:", err);
-      }
+      safeLocalStorageSet(`readNotices_${userId}`, stateArray);
       
       // Sync to Firestore
       if (user && userId !== "anonymous") {

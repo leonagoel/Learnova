@@ -32,8 +32,9 @@ import { useTheme } from "next-themes";
 import { TimerSection } from "@/components/productivity/TimerSection";
 import { TaskSection } from "@/components/productivity/TaskSection";
 import { CalendarSection } from "@/components/productivity/CalendarSection";
+import { CalendarSection } from "@/components/productivity/CalendarSection";
 import { AgendaListSection } from "@/components/productivity/AgendaListSection";
-
+import { safeLocalStorageSet, safeLocalStorageGet } from "@/lib/storage";
 const MODES = {
   focus: { label: "Focus", seconds: 25 * 60, accent: "text-cyan-300" },
   short: { label: "Short Break", seconds: 5 * 60, accent: "text-emerald-300" },
@@ -139,12 +140,8 @@ export default function ProductivityPage() {
   /** Syncs current tasks and agenda to the API. Writes to localStorage first for instant persistence. */
   const syncToApi = useCallback(
     async (currentTasks, currentAgenda) => {
-      try {
-        localStorage.setItem(TASKS_KEY, JSON.stringify(currentTasks));
-        localStorage.setItem(AGENDA_KEY, JSON.stringify(currentAgenda));
-      } catch (_) {
-        // localStorage may be full or unavailable
-      }
+      safeLocalStorageSet(TASKS_KEY, currentTasks);
+      safeLocalStorageSet(AGENDA_KEY, currentAgenda);
 
       if (!user || isSyncingRef.current) return;
       isSyncingRef.current = true;
@@ -182,14 +179,10 @@ export default function ProductivityPage() {
   useEffect(() => {
     async function loadData() {
       if (!user) {
-        try {
-          const savedTasks = localStorage.getItem(TASKS_KEY);
-          const savedAgenda = localStorage.getItem(AGENDA_KEY);
-          if (savedTasks) setTasks(JSON.parse(savedTasks));
-          if (savedAgenda) setAgendaItems(JSON.parse(savedAgenda));
-        } catch (_) {
-          // Corrupted localStorage — use empty defaults
-        }
+        const savedTasks = safeLocalStorageGet(TASKS_KEY);
+        const savedAgenda = safeLocalStorageGet(AGENDA_KEY);
+        if (savedTasks) setTasks(savedTasks);
+        if (savedAgenda) setAgendaItems(savedAgenda);
         setDataLoaded(true);
         return;
       }
@@ -209,15 +202,10 @@ export default function ProductivityPage() {
         } else {
           throw new Error("API returned non-ok");
         }
-      } catch (_) {
-        try {
-          const savedTasks = localStorage.getItem(TASKS_KEY);
-          const savedAgenda = localStorage.getItem(AGENDA_KEY);
-          if (savedTasks) setTasks(JSON.parse(savedTasks));
-          if (savedAgenda) setAgendaItems(JSON.parse(savedAgenda));
-        } catch (__) {
-          // Corrupted localStorage — use empty defaults
-        }
+        const savedTasks = safeLocalStorageGet(TASKS_KEY);
+        const savedAgenda = safeLocalStorageGet(AGENDA_KEY);
+        if (savedTasks) setTasks(savedTasks);
+        if (savedAgenda) setAgendaItems(savedAgenda);
       } finally {
         setDataLoaded(true);
       }
