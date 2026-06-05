@@ -176,13 +176,6 @@ export async function GET(request) {
     for (const settings of allSettings) {
       const threshold = settings.institute.lowAttendanceThreshold || 75;
 
-      // Derive the institute ID from the settings document. instituteId is the
-      // canonical field; fall back to _id only when instituteId is absent.
-      // Reject any document whose instituteId cannot be determined as a
-      // non-empty string: processing it with an undefined or empty key would
-      // cause studentsByInstitute.get() to return undefined, silently matching
-      // no students or incorrectly matching students from another institute if
-      // two settings documents resolve to the same fallback key.
       const rawInstituteId = settings.instituteId;
       if (
         !rawInstituteId ||
@@ -197,18 +190,13 @@ export async function GET(request) {
       }
       const instituteId = rawInstituteId.trim();
 
-      // Fetch students for this institute only instead of loading all students globally
-      const instituteStudents = await db.collection('users').find({
-        role: 'student',
-        instituteId,
-      }).toArray();
-
+      const instituteStudents = studentsByInstitute.get(instituteId) || [];
       if (instituteStudents.length === 0) continue;
 
       // Process students in batches to keep memory usage bounded
       for (let i = 0; i < instituteStudents.length; i += STUDENT_BATCH_SIZE) {
         const batch = instituteStudents.slice(i, i + STUDENT_BATCH_SIZE);
-        const batchUids = batch.map(s => s.firebaseUid).filter(Boolean);
+        const batchUids = batch.map(s => s.uid || s.firebaseUid).filter(Boolean);
         if (batchUids.length === 0) continue;
 
         // Load attendance records for this batch only
@@ -225,16 +213,9 @@ export async function GET(request) {
           }
         }
 
-        // Check cooldown for this batch (scoped $in query)
-        const recentLogs = await db.collection("warning_logs").find({
-          userId: { $in: batchUids },
-          createdAt: { $gte: cooldownDate },
-        }).project({ userId: 1 }).toArray();
-        const cooldownSet = new Set(recentLogs.map(l => l.userId));
-
         for (const student of batch) {
-          const uid = student.firebaseUid;
-          if (!uid || cooldownSet.has(uid)) continue;
+          const uid = student.uid || student.firebaseUid;
+          if (!uid || recentWarningUserIds.has(uid)) continue;
 
           const studentAttendance = attendanceByUser.get(uid) || [];
           const evaluation = evaluateStudentAttendance(studentAttendance, threshold);
@@ -268,15 +249,21 @@ export async function GET(request) {
               });
             }
 
-          totalWarnings++;
+            totalWarnings++;
+          }
         }
 
         if (notificationsToInsert.length >= FLUSH_THRESHOLD) {
           await flushNotifications();
         }
       }
+    }
 
-    await flushNotifications();
+    if (notificationsToInsert.length > 0) {
+      await db.collection("notifications").insertMany(notificationsToInsert);
+      await db.collection("warning_logs").insertMany(warningLogsToInsert);
+    }
+
     await sendWarningEmails(emailsToSend);
 
     return NextResponse.json({
