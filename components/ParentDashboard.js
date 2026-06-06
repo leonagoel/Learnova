@@ -40,6 +40,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiFetch } from "@/lib/apiClient";
 import DashboardSkeleton from "@/components/ui/DashboardSkeleton";
 import { Navbar } from "./Navbar";
+import { dashboardContentOffsetClass } from "@/components/navigation";
 import { exportToCSV, exportToPDF } from "@/utils/exportUtils";
 import ExportDropdown from "@/components/ui/ExportDropdown";
 
@@ -282,7 +283,7 @@ const ParentDashboard = () => {
 
   if (children.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white">
+      <div className={`min-h-screen bg-slate-950 text-white ${dashboardContentOffsetClass}`}>
         <Navbar />
         <div className="max-w-4xl mx-auto pt-32 px-6 text-center space-y-6">
           <div className="w-20 h-20 bg-pink-500/10 border border-pink-500/20 rounded-full flex items-center justify-center mx-auto text-pink-400">
@@ -319,7 +320,7 @@ const ParentDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white pb-12">
+    <div className={`min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white pb-12 ${dashboardContentOffsetClass}`}>
       <Navbar />
 
       {/* Main Header / Child Selector */}

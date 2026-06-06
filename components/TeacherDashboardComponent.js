@@ -7,6 +7,7 @@ import React, {
   useRef,
 } from "react";
 import { Navbar } from "./Navbar";
+import { dashboardContentOffsetClass } from "@/components/navigation";
 import Image from "next/image";
 import CurriculumBuilder from "./dashboard/CurriculumBuilder";
 import { useAuth } from "@/hooks/useAuth";
@@ -1110,7 +1111,7 @@ const TeacherDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className={`min-h-screen bg-background relative overflow-hidden ${dashboardContentOffsetClass}`}>
       {/* Premium Navbar */}
       <Navbar />
       {/* Animated Gradient Backgrounds */}
