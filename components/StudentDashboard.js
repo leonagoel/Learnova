@@ -30,6 +30,7 @@ import { useIsMounted } from "@/hooks/useIsMounted";
 import EngagementScoreCard from "@/components/EngagementScoreCard";
 import EngagementTrendChart from "@/components/EngagementTrendChart";
 import EngagementBreakdown from "@/components/EngagementBreakdown";
+import { calculateEngagementScore, getEngagementCategory } from "@/lib/engagementScore";
 
 const AchievementSection = dynamic(() => import("./AchievementSection"), {
   ssr: false,
@@ -47,12 +48,7 @@ const AttendanceChart = dynamic(() => import("./AttendanceChart"), {
 });
 
 import { weeklySchedule } from "@/constants/mockData";
-import { calculateEngagementScore, getEngagementCategory } from "@/lib/engagementScore";
-
 import AttendanceAnalytics from "./dashboard/AttendanceAnalytics";
-import EngagementScoreCard from "./EngagementScoreCard";
-import EngagementTrendChart from "./EngagementTrendChart";
-import EngagementBreakdown from "./EngagementBreakdown";
 import StreakCounter from "./gamification/StreakCounter";
 import XpProgressBar from "./gamification/XpProgressBar";
 import BadgeGallery from "./gamification/BadgeGallery";
@@ -86,6 +82,8 @@ const DAY_NAMES = [
 
 const ATTENDANCE_WINDOW_START_HOUR = 9;
 const ATTENDANCE_WINDOW_END_MINUTE = 10;
+
+// ── Utility Functions ──────────────────────────────────────────────────────
 
 const getUserInitials = (user) => {
   if (!user?.displayName && !user?.email) {
@@ -148,6 +146,8 @@ const getTodaySchedule = (now, schedule = weeklySchedule) => {
 
 const getScheduleTickKey = (now) =>
   `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+// ── Components ─────────────────────────────────────────────────────────────
 
 const DashboardError = ({ error, onRetry }) => (
   <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -230,6 +230,29 @@ const DashboardHeader = ({ user, currentTime, getInitials }) => (
   </div>
 );
 
+const StatCard = ({ color, label, value }) => {
+  const styles = {
+    green:
+      "from-green-500/20 to-green-600/20 border-green-500/30 text-green-400",
+    red: "from-red-500/20 to-red-600/20 border-red-500/30 text-red-400",
+    yellow:
+      "from-yellow-500/20 to-yellow-600/20 border-yellow-500/30 text-yellow-400",
+    blue: "from-blue-500/20 to-blue-600/20 border-blue-500/30 text-blue-400",
+  };
+
+  return (
+    <div
+      className={`bg-gradient-to-r ${styles[color]} border rounded-xl p-3 sm:p-4`}
+    >
+      <div className="text-[10px] sm:text-sm opacity-80">{label}</div>
+
+      <div className="text-base sm:text-xl font-bold">{value}</div>
+    </div>
+  );
+};
+
+// ── Main Component ─────────────────────────────────────────────────────────
+
 const StudentDashboard = () => {
   const { user } = useAuth();
 
@@ -254,6 +277,8 @@ const StudentDashboard = () => {
   const [engagementError, setEngagementError] = useState(null);
   const [engagementSaved, setEngagementSaved] = useState(false);
   const lastScheduleTickRef = useRef(getScheduleTickKey(new Date()));
+
+  // ── Memoized Calculations ──────────────────────────────────────────────
 
   const attendanceStats = useMemo(() => {
     const counts = recentActivity.reduce(
@@ -299,7 +324,14 @@ const StudentDashboard = () => {
   }, [recentActivity.length]);
 
   const assignmentSubmissionScore = useMemo(() => {
-    return Math.min(100, Math.round((recentActivity.filter((item) => item?.status === "present").length / 8) * 100));
+    return Math.min(
+      100,
+      Math.round(
+        (recentActivity.filter((item) => item?.status === "present").length /
+          8) *
+          100
+      )
+    );
   }, [recentActivity]);
 
   const academicPerformanceScore = useMemo(() => {
@@ -314,8 +346,25 @@ const StudentDashboard = () => {
       assignmentScore: assignmentSubmissionScore,
       academicScore: academicPerformanceScore,
     });
-  }, [attendanceStats?.percentage, activityParticipationScore, assignmentSubmissionScore, academicPerformanceScore]);
+  }, [
+    attendanceStats?.percentage,
+    activityParticipationScore,
+    assignmentSubmissionScore,
+    academicPerformanceScore,
+  ]);
 
+  const scheduleState = useMemo(
+    () => getTodaySchedule(scheduleTime, weeklySchedule),
+    [scheduleTime]
+  );
+
+  const todayClasses = scheduleState.classes;
+  const upcomingClass = scheduleState.upcomingClass;
+  const isAttendanceWindow = scheduleState.isAttendanceWindow;
+
+  // ── Effects ────────────────────────────────────────────────────────────
+
+  // Fetch engagement history
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -352,6 +401,7 @@ const StudentDashboard = () => {
     return () => controller.abort();
   }, [user?.uid]);
 
+  // Persist engagement metrics
   useEffect(() => {
     if (!user?.uid || engagementSaved || !engagementMetrics) return;
 
@@ -381,15 +431,7 @@ const StudentDashboard = () => {
     persistEngagement();
   }, [user?.uid, engagementMetrics, engagementSaved]);
 
-  const scheduleState = useMemo(
-    () => getTodaySchedule(scheduleTime, weeklySchedule),
-    [scheduleTime]
-  );
-
-  const todayClasses = scheduleState.classes;
-  const upcomingClass = scheduleState.upcomingClass;
-  const isAttendanceWindow = scheduleState.isAttendanceWindow;
-
+  // Dashboard update loop
   useEffect(() => {
     const loadingTimer = setTimeout(() => {
       if (isMounted()) setLoading(false);
@@ -419,6 +461,8 @@ const StudentDashboard = () => {
       clearTimeout(loadingTimer);
     };
   }, [isMounted]);
+
+  // ── Event Handlers ─────────────────────────────────────────────────────
 
   const handleEvaluateQuiz = (scoreOutOfFive) => {
     const percentage = (scoreOutOfFive / 5) * 100;
@@ -468,6 +512,8 @@ const StudentDashboard = () => {
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────
+
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -479,7 +525,9 @@ const StudentDashboard = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-background relative overflow-x-hidden ${dashboardContentOffsetClass}`}>
+    <div
+      className={`min-h-screen bg-background relative overflow-x-hidden ${dashboardContentOffsetClass}`}
+    >
       <Navbar />
 
       {/* Diagnostic Quiz Section */}
@@ -550,6 +598,7 @@ const StudentDashboard = () => {
         <AttendanceInsights recentActivity={recentActivity} />
       </div>
 
+      {/* Engagement Score Section */}
       <div className="max-w-7xl mx-auto mt-8 px-6">
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <EngagementScoreCard
@@ -564,9 +613,18 @@ const StudentDashboard = () => {
             <EngagementBreakdown
               breakdown={[
                 { label: "Attendance", value: engagementMetrics.attendanceScore },
-                { label: "Activity Participation", value: engagementMetrics.activityScore },
-                { label: "Assignment Submissions", value: engagementMetrics.assignmentScore },
-                { label: "Academic Performance", value: engagementMetrics.academicScore },
+                {
+                  label: "Activity Participation",
+                  value: engagementMetrics.activityScore,
+                },
+                {
+                  label: "Assignment Submissions",
+                  value: engagementMetrics.assignmentScore,
+                },
+                {
+                  label: "Academic Performance",
+                  value: engagementMetrics.academicScore,
+                },
               ]}
             />
           </div>
@@ -606,27 +664,6 @@ const StudentDashboard = () => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-const StatCard = ({ color, label, value }) => {
-  const styles = {
-    green:
-      "from-green-500/20 to-green-600/20 border-green-500/30 text-green-400",
-    red: "from-red-500/20 to-red-600/20 border-red-500/30 text-red-400",
-    yellow:
-      "from-yellow-500/20 to-yellow-600/20 border-yellow-500/30 text-yellow-400",
-    blue: "from-blue-500/20 to-blue-600/20 border-blue-500/30 text-blue-400",
-  };
-
-  return (
-    <div
-      className={`bg-gradient-to-r ${styles[color]} border rounded-xl p-3 sm:p-4`}
-    >
-      <div className="text-[10px] sm:text-sm opacity-80">{label}</div>
-
-      <div className="text-base sm:text-xl font-bold">{value}</div>
     </div>
   );
 };

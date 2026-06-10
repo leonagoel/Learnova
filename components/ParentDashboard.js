@@ -608,6 +608,7 @@ const ParentDashboard = () => {
         )}
       </AnimatePresence>
 
+      {/* ── Engagement Score Section ── */}
       <div className="max-w-7xl mx-auto px-6 mb-8">
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <EngagementScoreCard
