@@ -121,6 +121,15 @@ const ParentDashboard = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
+  const tabs = [
+    { id: "overview", label: "Overview", icon: Activity },
+    { id: "child_progress", label: "Progress Visualizer", icon: TrendingUp },
+    { id: "attendance", label: "Attendance Records", icon: Calendar },
+    { id: "academics", label: "Academic Performance", icon: BookOpen },
+    { id: "achievements", label: "Achievements & Rewards", icon: Award },
+    { id: "notices", label: "Campus Announcements", icon: FileText },
+  ];
+
   // Linked children
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -381,7 +390,7 @@ const ParentDashboard = () => {
 
   if (children.length === 0) {
     return (
-
+      <div className="min-h-screen bg-slate-950 text-white">
         <Navbar />
         <div className="max-w-4xl mx-auto pt-32 px-6 text-center space-y-6">
           <div className="w-20 h-20 bg-pink-500/10 border border-pink-500/20 rounded-full flex items-center justify-center mx-auto text-pink-400">
@@ -423,7 +432,7 @@ const ParentDashboard = () => {
   };
 
   return (
-
+    <div className="min-h-screen bg-slate-950 text-white pb-12">
       <Navbar />
 
       {/* ── Main Header / Child Profile Selector ── */}
@@ -561,7 +570,7 @@ const ParentDashboard = () => {
       {/* ── Tab Switcher Menu ── */}
       <div className="max-w-7xl mx-auto px-6 mb-8">
         <div className="flex items-center gap-2 border-b border-white/10 pb-2 flex-wrap">
-
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -683,6 +692,118 @@ const ParentDashboard = () => {
                     </div>
                   </motion.div>
                 </div>
+
+                {/* Attendance Insights & Early Warning Card */}
+                {attendance?.prediction && (
+                  <motion.div
+                    variants={cardVariants}
+                    className="bg-white/5 border border-white/10 rounded-3xl p-6 shadow-xl backdrop-blur-md relative overflow-hidden"
+                  >
+                    {/* Background glow decoration */}
+                    <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-pink-500/10 to-rose-600/5 rounded-full filter blur-3xl pointer-events-none" />
+                    
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-pink-400" />
+                          <h3 className="text-lg font-bold text-white">Attendance Insights & Early Warnings</h3>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          AI-powered analysis and projected attendance trends based on recent records.
+                        </p>
+                      </div>
+
+                      {/* Risk Level Badge */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-400 font-semibold font-mono">Risk Level:</span>
+                        {attendance.prediction.riskLevel === "high" && (
+                          <span className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/25 animate-pulse">
+                            <XCircle className="w-4.5 h-4.5" />
+                            🔴 High Risk
+                          </span>
+                        )}
+                        {attendance.prediction.riskLevel === "moderate" && (
+                          <span className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                            <AlertTriangle className="w-4.5 h-4.5" />
+                            🟡 Moderate Risk
+                          </span>
+                        )}
+                        {attendance.prediction.riskLevel === "low" && (
+                          <span className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            <CheckCircle className="w-4.5 h-4.5" />
+                            🟢 Low Risk
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <hr className="border-white/10 my-5" />
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Projected Percentage Display */}
+                      <div className="bg-black/30 border border-white/5 rounded-2xl p-5 flex flex-col items-center justify-center text-center space-y-3">
+                        <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Projected Attendance</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-extrabold text-white">{attendance.prediction.projectedPercentage}%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Estimated rate if current {attendance.prediction.trend} trend continues.
+                        </p>
+                      </div>
+
+                      {/* Trend Details */}
+                      <div className="bg-black/30 border border-white/5 rounded-2xl p-5 flex flex-col justify-center space-y-3">
+                        <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">Trend Analysis</span>
+                        <div className="flex items-center gap-3">
+                          {attendance.prediction.trend === "declining" ? (
+                            <>
+                              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-400">
+                                <TrendingDown className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white capitalize">{attendance.prediction.trend}</h4>
+                                <p className="text-[10px] text-slate-400">Attendance frequency is slowing down.</p>
+                              </div>
+                            </>
+                          ) : attendance.prediction.trend === "improving" ? (
+                            <>
+                              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+                                <TrendingUp className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white capitalize">{attendance.prediction.trend}</h4>
+                                <p className="text-[10px] text-slate-400">Recent records show improved frequency!</p>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400">
+                                <Clock className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white capitalize">{attendance.prediction.trend}</h4>
+                                <p className="text-[10px] text-slate-400">Stable patterns of class attendance.</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Proactive Recommendations */}
+                      <div className="bg-black/30 border border-white/5 rounded-2xl p-5 flex flex-col justify-center space-y-3">
+                        <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Recommendations</span>
+                        <div className="space-y-2">
+                          {attendance.prediction.recommendations.map((rec, idx) => (
+                            <div key={idx} className="flex items-start gap-2">
+                              <span className="text-pink-400 text-sm mt-0.5">•</span>
+                              <p className="text-xs text-slate-300 leading-relaxed font-medium">{rec}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* Analytical Charts Block */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
