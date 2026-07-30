@@ -89,6 +89,19 @@ export default function UniversalSettings() {
   const [pushPermission, setPushPermission] = useState("default");
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
+  const [instituteSettings, setInstituteSettings] = useState({
+    enableAttendanceAutomation: false,
+    lowAttendanceThreshold: 75,
+  });
+
+  useEffect(() => {
+    const savedLanguage = localStorage.getItem("learnova-language");
+
+    if (savedLanguage) {
+      updateSetting("appearance", "language", savedLanguage);
+      i18n.changeLanguage(savedLanguage);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -251,6 +264,7 @@ export default function UniversalSettings() {
           achievementAlerts: true,
           weeklyReports: false,
           marketingEmails: false,
+          bulkAnnouncements: true,
           attendanceAlerts: true,
           gradeUpdates: true,
         },
@@ -273,6 +287,7 @@ export default function UniversalSettings() {
           achievementAlerts: false,
           weeklyReports: true,
           marketingEmails: false,
+          bulkAnnouncements: true,
           studentSubmissions: true,
           parentMessages: true,
         },
@@ -295,6 +310,7 @@ export default function UniversalSettings() {
           achievementAlerts: false,
           weeklyReports: true,
           marketingEmails: false,
+          bulkAnnouncements: true,
           systemAlerts: true,
           securityAlerts: true,
         },
@@ -317,6 +333,7 @@ export default function UniversalSettings() {
           achievementAlerts: false,
           weeklyReports: true,
           marketingEmails: true,
+          bulkAnnouncements: true,
           enrollmentAlerts: true,
           performanceReports: true,
         },
@@ -339,6 +356,7 @@ export default function UniversalSettings() {
           achievementAlerts: true,
           weeklyReports: true,
           marketingEmails: false,
+          bulkAnnouncements: true,
           childProgress: true,
           schoolUpdates: true,
         },
@@ -394,6 +412,31 @@ export default function UniversalSettings() {
               avatar: getUserPhoto() || prev.profile.avatar,
             },
           }));
+
+          // Load institute-level attendance automation settings for admin/institute roles
+          const role = user?.role || "student";
+          if (["admin", "institute"].includes(role)) {
+            try {
+              const res = await apiFetch("/api/settings", {
+                method: "GET",
+                credentials: "include",
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data?.institute) {
+                  setInstituteSettings((prev) => ({
+                    ...prev,
+                    enableAttendanceAutomation:
+                      data.institute.enableAttendanceAutomation ?? prev.enableAttendanceAutomation,
+                    lowAttendanceThreshold:
+                      data.institute.lowAttendanceThreshold ?? prev.lowAttendanceThreshold,
+                  }));
+                }
+              }
+            } catch (instituteErr) {
+              console.warn("Could not load institute settings:", instituteErr);
+            }
+          }
         }
       } catch (err) {
         setError("Failed to load settings. Please try again.");
@@ -469,17 +512,29 @@ export default function UniversalSettings() {
         }
       }
 
+      // Save other settings
+      const role = user?.role || "student";
+      const body = {
+        ...settings,
+        profile: {
+          ...settings.profile,
+          avatar: avatarUrl,
+        },
+        userId: user?.uid,
+      };
+
+      // Include institute-level attendance automation settings for privileged roles
+      if (["admin", "institute"].includes(role)) {
+        body.institute = {
+          enableAttendanceAutomation: instituteSettings.enableAttendanceAutomation,
+          lowAttendanceThreshold: Number(instituteSettings.lowAttendanceThreshold),
+        };
+      }
+
       const response = await apiFetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...settings,
-          profile: {
-            ...settings.profile,
-            avatar: avatarUrl,
-          },
-          userId: user?.uid,
-        }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -681,7 +736,7 @@ export default function UniversalSettings() {
           <div>
             <h1 className="text-3xl font-bold text-white mb-2 flex items-center">
               <Settings className="h-8 w-8 mr-3 text-blue-400" />
-              {t("settings")}
+              {t("settings.description")}
               <Sparkles className="ml-3 h-6 w-6 text-yellow-400 animate-pulse" />
             </h1>
             <p className="text-white/60">
@@ -994,6 +1049,67 @@ export default function UniversalSettings() {
                     )}
                   </div>
                 </SettingCard>
+
+                {/* Attendance Automation — institute/admin only */}
+                {["admin", "institute"].includes(user?.role) && (
+                  <SettingCard
+                    title="Attendance Automation"
+                    description="Automatically notify students by email when their attendance drops below the configured threshold. Requires EmailJS environment variables to be configured."
+                  >
+                    <div className="space-y-5">
+                      <ToggleSwitch
+                        enabled={instituteSettings.enableAttendanceAutomation}
+                        onChange={(value) => {
+                          setInstituteSettings((prev) => ({
+                            ...prev,
+                            enableAttendanceAutomation: value,
+                          }));
+                          setHasChanges(true);
+                        }}
+                        label="Enable Attendance Automation"
+                        description="Run a daily cron job to detect students with low attendance and send email warnings."
+                      />
+
+                      <div
+                        className={`transition-opacity duration-300 ${
+                          instituteSettings.enableAttendanceAutomation
+                            ? "opacity-100"
+                            : "opacity-40 pointer-events-none"
+                        }`}
+                      >
+                        <label className="block text-white/80 text-sm font-medium mb-2">
+                          Low Attendance Threshold:{" "}
+                          <span className="text-blue-400 font-bold">
+                            {instituteSettings.lowAttendanceThreshold}%
+                          </span>
+                        </label>
+                        <p className="text-white/50 text-xs mb-3">
+                          Students whose overall attendance falls below this percentage will receive an automated email warning.
+                        </p>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={instituteSettings.lowAttendanceThreshold}
+                          onChange={(e) => {
+                            setInstituteSettings((prev) => ({
+                              ...prev,
+                              lowAttendanceThreshold: Number(e.target.value),
+                            }));
+                            setHasChanges(true);
+                          }}
+                          className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <div className="flex justify-between text-white/40 text-xs mt-1">
+                          <span>0%</span>
+                          <span>50%</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </SettingCard>
+                )}
               </div>
             )}
 
@@ -1323,12 +1439,12 @@ export default function UniversalSettings() {
                       <select
                         value={settings.appearance.language}
                         onChange={(e) => {
-                          updateSetting(
-                            "appearance",
-                            "language",
-                            e.target.value
-                          );
-                          i18n.changeLanguage(e.target.value);
+                          const lang = e.target.value;
+
+                          updateSetting("appearance", "language", lang);
+                          i18n.changeLanguage(lang);
+
+                          localStorage.setItem("learnova-language", lang);
                         }}
                         className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:border-blue-400 focus:outline-none"
                       >
@@ -1346,6 +1462,17 @@ export default function UniversalSettings() {
                         </option>
                         <option value="zh" className="bg-slate-950 text-white">
                           中文
+                        </option>
+                        <option value="hi" className="bg-slate-950 text-white">
+                          हिन्दी
+                        </option>
+
+                        <option value="ja" className="bg-slate-950 text-white">
+                          日本語
+                        </option>
+
+                        <option value="ar" className="bg-slate-950 text-white">
+                          العربية
                         </option>
                       </select>
                     </div>

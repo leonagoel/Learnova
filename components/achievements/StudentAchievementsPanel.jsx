@@ -6,6 +6,7 @@ import { Award, Search, Filter, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch } from "@/lib/apiClient";
+import useDebouncedValue from "@/hooks/useDebouncedValue";
 import AchievementCard from "./AchievementCard";
 import CertificatePreviewModal from "./CertificatePreviewModal";
 import { ACHIEVEMENT_CATEGORIES } from "./constants";
@@ -18,13 +19,15 @@ export default function StudentAchievementsPanel() {
   const [category, setCategory] = useState("");
   const [preview, setPreview] = useState(null);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const fetchAchievements = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       const token = await user.getIdToken();
       const params = new URLSearchParams();
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       if (category) params.set("category", category);
       const qs = params.toString() ? `?${params}` : "";
       const result = await apiFetch(
@@ -39,11 +42,46 @@ export default function StudentAchievementsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [user, search, category]);
+  }, [user, debouncedSearch, category]);
 
   useEffect(() => {
     fetchAchievements();
   }, [fetchAchievements]);
+
+  const handleDownloadCertificate = (achievement) => {
+  const content = `
+Learnova Achievement Certificate
+
+Awarded To:
+${user?.displayName || "Student"}
+
+Achievement:
+${achievement.title}
+
+Category:
+${achievement.category}
+
+Status:
+${achievement.verificationStatus}
+
+Congratulations on completing this achievement!
+`;
+
+  const blob = new Blob([content], {
+    type: "text/plain",
+  });
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${achievement.title}-certificate.txt`;
+  link.click();
+
+  URL.revokeObjectURL(url);
+
+  toast.success("Certificate downloaded");
+};
 
   const stats = useMemo(() => {
     const verified = achievements.filter((a) => a.verificationStatus === "Verified").length;
@@ -151,13 +189,21 @@ export default function StudentAchievementsPanel() {
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10 hidden md:block" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:pl-8">
             {achievements.map((a, i) => (
-              <AchievementCard
-                key={a.achievementId}
-                achievement={a}
-                index={i}
-                onPreview={setPreview}
-              />
-            ))}
+  <div key={a.achievementId}>
+    <AchievementCard
+      achievement={a}
+      index={i}
+      onPreview={setPreview}
+    />
+
+    <button
+      onClick={() => handleDownloadCertificate(a)}
+      className="mt-2 w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm"
+    >
+      Download Certificate
+    </button>
+  </div>
+))}
           </div>
         </div>
       )}

@@ -4,7 +4,11 @@ import { authorizeCronRequest } from "@/lib/cronAuth";
 import { connectDb } from "@/lib/mongodb";
 import { initializeFirebase } from "@/lib/firebase-admin";
 import { evaluateStudentAttendance } from "@/lib/attendanceUtils";
+import { enqueue, JOB_TYPES } from "@/lib/queue";
+import { logger } from "@/lib/logger";
 import { publishEvent } from "@/lib/ssePublisher";
+import { emitWebhookEvent } from "@/lib/webhook/dispatcher";
+import { sendLowAttendanceWarning } from "@/services/emailService";
 
 export const dynamic = "force-dynamic";
 
@@ -55,57 +59,17 @@ async function getRecentWarningUserIds(db, userIds, cooldownDate) {
 }
 
 async function sendWarningEmails(emailsToSend) {
-  const hasEmailConfig =
-    process.env.EMAILJS_SERVICE_ID &&
-    process.env.EMAILJS_TEMPLATE_ID &&
-    process.env.EMAILJS_PUBLIC_KEY;
+  const dashboardUrl =
+    process.env.NEXT_PUBLIC_APP_URL || "https://learnova.app";
 
-  if (!hasEmailConfig || emailsToSend.length === 0) {
-    return;
-  }
-
-  const sendEmail = async (emailData) => {
-    try {
-      const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          service_id: process.env.EMAILJS_SERVICE_ID,
-          template_id: process.env.EMAILJS_TEMPLATE_ID,
-          user_id: process.env.EMAILJS_PUBLIC_KEY,
-          template_params: emailData,
-        }),
-      });
-
-      if (!response.ok) {
-        let responseBody = "";
-        try {
-          responseBody = await response.text();
-        } catch {
-          // Ignore body parse failures and log status-based diagnostics.
-        }
-
-        console.error(
-          `[attendance-warnings] EmailJS request failed for ${emailData.to_email} with status ${response.status} ${response.statusText}${
-            responseBody ? `: ${responseBody}` : ""
-          }`
-        );
-      }
-    } catch (error) {
-      console.error(
-        `[attendance-warnings] Failed to send email to ${emailData.to_email}:`,
-        error
-      );
-    }
-  };
-
-  // Process emails in parallel chunks to prevent serverless function timeouts
-  const CHUNK_SIZE = 50;
-  for (let i = 0; i < emailsToSend.length; i += CHUNK_SIZE) {
-    const chunk = emailsToSend.slice(i, i + CHUNK_SIZE);
-    await Promise.allSettled(chunk.map(sendEmail));
+  for (const emailData of emailsToSend) {
+    sendLowAttendanceWarning({
+      email: emailData.to_email,
+      name: emailData.to_name,
+      attendancePercentage: emailData.attendance_percentage,
+      threshold: emailData.threshold,
+      dashboardUrl,
+    });
   }
 }
 
@@ -164,7 +128,8 @@ export async function GET(request) {
           message: notif.message,
           type: notif.type,
           read: false,
-          createdAt: notif.createdAt?.toISOString?.() || new Date().toISOString(),
+          createdAt:
+            notif.createdAt?.toISOString?.() || new Date().toISOString(),
         }).catch(() => {});
       }
       notificationsToInsert = [];
@@ -224,16 +189,21 @@ export async function GET(request) {
       // Process students in batches to keep memory usage bounded
       for (let i = 0; i < instituteStudents.length; i += STUDENT_BATCH_SIZE) {
         const batch = instituteStudents.slice(i, i + STUDENT_BATCH_SIZE);
-        const batchUids = batch.map(s => s.uid || s.firebaseUid).filter(Boolean);
+        const batchUids = batch
+          .map((s) => s.uid || s.firebaseUid)
+          .filter(Boolean);
         if (batchUids.length === 0) continue;
 
         // Load attendance records for this batch only
-        const records = await db.collection("attendance").find({
-          userId: { $in: batchUids },
-          instituteId,
-        }).toArray();
+        const records = await db
+          .collection("attendance")
+          .find({
+            userId: { $in: batchUids },
+            instituteId,
+          })
+          .toArray();
 
-        const attendanceByUser = new Map(batchUids.map(uid => [uid, []]));
+        const attendanceByUser = new Map(batchUids.map((uid) => [uid, []]));
         for (const record of records) {
           const userRecords = attendanceByUser.get(record.userId);
           if (userRecords) {
@@ -246,7 +216,10 @@ export async function GET(request) {
           if (!uid || recentWarningUserIds.has(uid)) continue;
 
           const studentAttendance = attendanceByUser.get(uid) || [];
-          const evaluation = evaluateStudentAttendance(studentAttendance, threshold);
+          const evaluation = evaluateStudentAttendance(
+            studentAttendance,
+            threshold
+          );
 
           if (evaluation.isBelowThreshold) {
             const email = student.email;
@@ -298,12 +271,31 @@ export async function GET(request) {
           message: notif.message,
           type: notif.type,
           read: false,
-          createdAt: notif.createdAt?.toISOString?.() || new Date().toISOString(),
+          createdAt:
+            notif.createdAt?.toISOString?.() || new Date().toISOString(),
         }).catch(() => {});
       }
     }
 
-    await sendWarningEmails(emailsToSend);
+    if (emailsToSend.length > 0) {
+      try {
+        const jobId = await enqueue(JOB_TYPES.SEND_BULK_EMAILS, {
+          emails: emailsToSend,
+        });
+        logger.info("[attendance-warnings] Queued bulk email job", {
+          jobId,
+          emailCount: emailsToSend.length,
+        });
+      } catch (queueErr) {
+        logger.error("[attendance-warnings] Failed to queue bulk email job", {
+          error: queueErr.message,
+        });
+      }
+    }
+
+    emitWebhookEvent("warning.issued", {
+      totalWarnings,
+    });
 
     return NextResponse.json({
       success: true,

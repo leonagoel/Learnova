@@ -6,6 +6,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { AppError } from "@/lib/errors";
 import { recordAttendanceSchema, withValidation } from "@/lib/validations";
 import { AttendanceService } from "@/lib/services/attendanceService";
+import { emitWebhookEvent } from "@/lib/webhook/dispatcher";
 
 export const POST = withErrorHandler(
   withValidation(
@@ -23,7 +24,6 @@ export const POST = withErrorHandler(
 
       const { userId, studentName, email, confidenceScore, date } =
         validatedData;
-      const normalizedDate = date || getLocalDateKey();
 
       // 2. Ensure they are only submitting attendance for their own UID, OR they are a teacher/admin!
       const isTeacherOrAdmin =
@@ -33,6 +33,32 @@ export const POST = withErrorHandler(
           "Forbidden: Cannot submit attendance for another user",
           403
         );
+      }
+
+      // 2b. Only teachers/admins may back-date attendance. Students always
+      // record for the server's current day, otherwise a student could POST
+      // any past `date` and silently backfill an attendance record for a day
+      // they never attended (issue #4061). Also reject future dates outright.
+      const serverDate = getLocalDateKey();
+      let normalizedDate = serverDate;
+      if (date) {
+        if (!isTeacherOrAdmin) {
+          if (date !== serverDate) {
+            return jsonError(
+              "Forbidden: Only teachers/admins may record attendance for a past date",
+              403
+            );
+          }
+          normalizedDate = serverDate;
+        } else {
+          if (date > serverDate) {
+            return jsonError(
+              "Bad Request: Cannot record attendance for a future date",
+              400
+            );
+          }
+          normalizedDate = date;
+        }
       }
 
       // 3. Ensure they actually matched the face threshold (60 is the minimum configured in the frontend)
@@ -53,24 +79,26 @@ export const POST = withErrorHandler(
           userId,
           studentName,
           email,
-          confidenceScore,
+          normalizedConfidenceScore: normalizedConfidence,
           normalizedDate,
         },
         token
       );
 
-      if (sagaResult.context._alreadyRecorded) {
-        return jsonSuccess({ alreadyRecorded: true }, 200);
+      const alreadyRecorded = Boolean(sagaResult.context?._alreadyRecorded);
+
+      if (sagaResult.success && !alreadyRecorded) {
+        emitWebhookEvent("attendance.recorded", {
+          studentId: userId,
+          studentName,
+          email,
+          confidence: normalizedConfidence,
+          date: normalizedDate,
+          recordedBy: token.uid,
+        });
       }
 
-      if (!sagaResult.success) {
-        console.error(
-          `[attendance] Saga failed at step "${sagaResult.failedStep}" for user ${userId}: ${sagaResult.error}`
-        );
-        return jsonError("Attendance recording failed", 502);
-      }
-
-      return jsonSuccess({ alreadyRecorded: false }, 201);
+      return jsonSuccess({ alreadyRecorded }, alreadyRecorded ? 200 : 201);
     }
   )
 );
